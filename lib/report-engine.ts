@@ -7,6 +7,7 @@ export type Focus = 'energy' | 'strength' | 'relationship' | 'overall';
 export type Effective = 'clarity' | 'autonomy' | 'coordination' | 'progress';
 export type Overload = 'start_delay' | 'over_response' | 'cognitive_carryover' | 'input_fatigue';
 export type Channel = 'input' | 'output' | 'result' | 'rule' | 'peer';
+export type Element = 'wood' | 'fire' | 'earth' | 'metal' | 'water';
 
 export type FormData = {
   year: string;
@@ -14,163 +15,265 @@ export type FormData = {
   day: string;
   hour: HourOption | '';
   focus: Focus | '';
-  effective: Effective | '';
-  overload: Overload | '';
+  effective: Effective[];
+  overload: Overload[];
 };
 
 export type BaseToneReport = {
   productName: string;
   contentVersion: string;
-  mode: 'structural_candidate' | 'fallback';
-  title: string;
-  subtitle: string;
-  coreDescription: string;
-  effectiveCondition: string;
-  overloadSignal: string;
-  observationQuestion: string;
-  boundaryNote: string;
-  fullReportBridge: string;
-  imageKey: string;
+  poeticTitle: string;
+  poeticLine: string;
+  dayPillar: string;
+  monthCommand: string;
+  mainAxisTitle: string;
+  mainAxisSummary: string;
+  originalChart: string;
+  adjustment: string;
+  expandCondition: string;
+  obstruction: string;
+  adjustmentPath: string;
+  onlineReality: string;
+  overloadReality: string;
+  observation: string;
+  dayElement: Element;
+  dayPolarity: 'yang' | 'yin';
+  dayBranchIndex: number;
+  season: 'spring' | 'summer' | 'autumn' | 'winter';
 };
 
-const HOUR_RANGES: Record<Exclude<HourOption, 'unknown'>, [[number, number], [number, number]]> = {
-  zi_early: [[0, 0], [0, 59]], chou: [[1, 0], [2, 59]], yin: [[3, 0], [4, 59]],
-  mao: [[5, 0], [6, 59]], chen: [[7, 0], [8, 59]], si: [[9, 0], [10, 59]],
-  wu: [[11, 0], [12, 59]], wei: [[13, 0], [14, 59]], shen: [[15, 0], [16, 59]],
-  you: [[17, 0], [18, 59]], xu: [[19, 0], [20, 59]], hai: [[21, 0], [22, 59]],
-  zi_late: [[23, 0], [23, 59]],
+type Strength = 'strong' | 'balanced' | 'weak';
+
+const STEM_ELEMENT: Record<string, Element> = {
+  甲: 'wood', 乙: 'wood', 丙: 'fire', 丁: 'fire', 戊: 'earth', 己: 'earth',
+  庚: 'metal', 辛: 'metal', 壬: 'water', 癸: 'water',
+};
+const STEM_POLARITY: Record<string, 'yang' | 'yin'> = {
+  甲: 'yang', 乙: 'yin', 丙: 'yang', 丁: 'yin', 戊: 'yang', 己: 'yin',
+  庚: 'yang', 辛: 'yin', 壬: 'yang', 癸: 'yin',
+};
+const BRANCHES = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
+const PRODUCES: Record<Element, Element> = { wood: 'fire', fire: 'earth', earth: 'metal', metal: 'water', water: 'wood' };
+const CONTROLS: Record<Element, Element> = { wood: 'earth', earth: 'water', water: 'fire', fire: 'metal', metal: 'wood' };
+
+const HOUR_MIDDLE: Record<Exclude<HourOption, 'unknown'>, [number, number]> = {
+  zi_early: [0, 30], chou: [2, 0], yin: [4, 0], mao: [6, 0], chen: [8, 0], si: [10, 0],
+  wu: [12, 0], wei: [14, 0], shen: [16, 0], you: [18, 0], xu: [20, 0], hai: [22, 0], zi_late: [23, 30],
 };
 
 const TEN_GOD_GROUP: Record<string, Channel> = {
-  比肩: 'peer', 劫财: 'peer', 食神: 'output', 伤官: 'output',
-  偏财: 'result', 正财: 'result', 七杀: 'rule', 正官: 'rule', 偏印: 'input', 正印: 'input',
+  比肩: 'peer', 劫财: 'peer', 食神: 'output', 伤官: 'output', 偏财: 'result', 正财: 'result',
+  七杀: 'rule', 正官: 'rule', 偏印: 'input', 正印: 'input',
 };
-
-const SEASON_BY_MONTH: Record<string, 'spring' | 'summer' | 'autumn' | 'winter'> = {
+const CHANNEL_ZH: Record<Channel, string> = {
+  input: '印星', output: '食伤', result: '财星', rule: '官杀', peer: '比劫',
+};
+const SEASON_BY_MONTH: Record<string, BaseToneReport['season']> = {
   寅: 'spring', 卯: 'spring', 辰: 'spring', 巳: 'summer', 午: 'summer', 未: 'summer',
   申: 'autumn', 酉: 'autumn', 戌: 'autumn', 亥: 'winter', 子: 'winter', 丑: 'winter',
 };
 
-const TITLES: Record<'spring' | 'summer' | 'autumn' | 'winter', Record<Channel, string>> = {
-  spring: { input: '雨前的土壤', output: '抽枝的新柳', result: '向阳的苗圃', rule: '分畦的春田', peer: '并生的竹影' },
-  summer: { input: '树荫下的深井', output: '穿林的长风', result: '盛夏的果园', rule: '清楚的河岸', peer: '相接的树冠' },
-  autumn: { input: '收声的谷仓', output: '出谷的清风', result: '成熟的稻穗', rule: '清晰的山脊', peer: '并行的雁阵' },
-  winter: { input: '雪下的泉眼', output: '冬夜里的篝火', result: '封存的种子', rule: '结冰的河岸', peer: '围炉的灯影' },
+const STEM_IMAGE: Record<string, string> = {
+  甲: '乔木', 乙: '藤蔓', 丙: '朝阳', 丁: '灯火', 戊: '山丘', 己: '田园',
+  庚: '岩刃', 辛: '清露', 壬: '长河', 癸: '微雨',
+};
+const BRANCH_IMAGE: Record<string, string> = {
+  子: '夜潮', 丑: '冻土', 寅: '初林', 卯: '花径', 辰: '云野', 巳: '暖谷',
+  午: '日原', 未: '晚坡', 申: '风岭', 酉: '清庭', 戌: '暮原', 亥: '深河',
+};
+const SEASON_LINE: Record<BaseToneReport['season'], string> = {
+  spring: '新意正在生长，也需要一处能让力量扎根的地方。',
+  summer: '光与热推动事物展开，节奏决定这份力量能走多远。',
+  autumn: '清晰来自取舍；留下真正重要的，力量才会聚拢。',
+  winter: '表面安静时，内部仍有水流；支点让积累重新向前。',
 };
 
-const FALLBACK_TITLES = {
-  spring: '雨后的新芽', summer: '午后的树荫', autumn: '收束的河谷', winter: '雪下的水流',
+const EFFECTIVE_LABEL: Record<Effective, string> = {
+  clarity: '方向清楚', autonomy: '有自主空间', coordination: '配合顺畅', progress: '进展可见',
+};
+const OVERLOAD_LABEL: Record<Overload, string> = {
+  start_delay: '越来越难启动', over_response: '持续回应、停不下来',
+  cognitive_carryover: '事情结束后头脑仍在处理', input_fatigue: '对信息与交流失去耐心',
 };
 
-const CHANNEL_COPY: Record<Channel, string> = {
-  input: '面对新任务或复杂信息时，你更容易先为信息建立位置，再决定怎样回应。先理解并不等于迟缓，它是在为后续判断准备一个稳定的框架。',
-  output: '当想法能够进入表达、试做或成果雏形时，你更容易把状态组织起来。对你而言，看见一个东西正在形成，常比长时间停留在设想里更有抓力。',
-  result: '当任务有清楚对象、具体步骤或可见结果时，你更容易找到投入的抓手。抽象目标一旦落到可以处理的对象，注意力也更容易聚拢。',
-  rule: '当标准、责任和完成边界清楚时，你更容易形成行动秩序。明确要求并不只是限制，也能帮助你判断什么需要承担、什么可以停下。',
-  peer: '当你能够参与、对照或与他人形成共同节奏时，更容易确认自己的位置与力度。有效的互动给你参照，但参照并不等于把决定交给别人。',
+const AXIS_TITLE: Record<Channel, Record<Strength, string>> = {
+  input: {
+    strong: '让理解形成出口，而不是继续增加准备',
+    balanced: '在吸收与表达之间建立自己的节奏',
+    weak: '先形成内部支点，再处理复杂信息',
+  },
+  output: {
+    strong: '让表达获得承接，使能力形成结果',
+    balanced: '在形成想法与落地结果之间保持流动',
+    weak: '先稳住承载，再让能力向外展开',
+  },
+  result: {
+    strong: '把现实推动力放进清楚的边界',
+    balanced: '在投入、交换与成果之间分配力量',
+    weak: '先确认承载，再接住具体目标与结果',
+  },
+  rule: {
+    strong: '让秩序服务于判断，而不是扩大压力',
+    balanced: '在责任、标准与自主行动之间分配力量',
+    weak: '先建立支点，再承接规则与责任',
+  },
+  peer: {
+    strong: '让自主力量拥有出口与协作边界',
+    balanced: '在自我推进与共同节奏之间找到位置',
+    weak: '借助可靠支点，形成自己的推进节奏',
+  },
 };
 
-const EFFECTIVE_COPY: Record<Effective, { body: string; short: string }> = {
-  clarity: { body: '方向清楚、优先级明确时，你更容易把注意力留给真正重要的部分，而不是在多个入口之间来回切换。', short: '清楚的方向与优先级' },
-  autonomy: { body: '拥有执行方式和节奏的决定空间时，你更容易进入持续状态；同一目标下，方法上的余地会明显影响投入质量。', short: '可以自主安排方法与节奏' },
-  coordination: { body: '角色配合、沟通和反馈顺畅时，你更容易稳定推进；你需要的不是持续热闹，而是回应能够帮助事情向前。', short: '角色与反馈彼此清楚' },
-  progress: { body: '当进展可见、投入能得到阶段性回声时，你更容易维持力度；模糊的长期目标需要被拆成看得见的节点。', short: '能看见阶段进展' },
+const CHANNEL_FUNCTION: Record<Channel, { effective: string; overload: string; need: string }> = {
+  input: {
+    effective: '你擅长先吸收、辨别和组织信息，再形成判断。复杂度增加时，这种先建立内部框架的方式，能帮助你减少仓促反应。',
+    overload: '当输入持续增加却没有进入表达或决策，理解会从支点变成滞留：看起来仍在准备，内部却难以真正结束。',
+    need: '让已经形成的理解进入一次表达、试做或明确决定',
+  },
+  output: {
+    effective: '你的力量更容易通过表达、创造、拆解或试做被看见。只要有具体对象承接，想法会在行动中逐渐清楚。',
+    overload: '当输出不断发生，却缺少结果、反馈或可停下的节点，能力会变成持续外放，内部承载也随之变薄。',
+    need: '为输出设置对象、完成标准和回收反馈的节点',
+  },
+  result: {
+    effective: '你更容易通过具体对象、资源安排和可见成果组织行动。目标一旦可处理，投入就不再停留在抽象层面。',
+    overload: '当目标和责任继续增加、承载却没有同步补上，你仍可能维持推进，但会越来越依赖即时处理和个人补位。',
+    need: '先核对可用时间、权限和资源，再决定要承接多少',
+  },
+  rule: {
+    effective: '你对标准、责任和秩序较敏感。边界清楚时，这种敏感会成为判断优先级和稳定交付的能力。',
+    overload: '当责任先落下、权限和结束条件却不清楚时，秩序感会转成持续自我要求：事情能够完成，压力却难以退出。',
+    need: '把责任、权限与完成边界放回同一张清单',
+  },
+  peer: {
+    effective: '你有较强的主体推进倾向，需要通过参与、比较或协作确认自己的位置。空间清楚时，这会形成稳定的自主行动。',
+    overload: '当资源边界和角色位置变得模糊，主体力量容易转成反复较劲、独自承担，或在多人节奏中难以收束。',
+    need: '先分清自己的决定、共同决定和不由自己承担的部分',
+  },
 };
 
-const OVERLOAD_COPY: Record<Overload, { body: string; short: string }> = {
-  start_delay: { body: '当任务入口过多、条件仍不清楚时，最早出现的信号是启动不断后移。此时继续增加计划，未必比先确认一个最小入口更有效。', short: '启动开始不断后移' },
-  over_response: { body: '当外部要求持续进入、回应没有结束边界时，你会先失去停下来的位置。真正需要观察的不是回应多少，而是什么时候已经接过了不属于这一轮的部分。', short: '回应已经没有结束边界' },
-  cognitive_carryover: { body: '事情已经结束，头脑却仍在反复处理，是你最早能看见的消耗信号。区分“还有新信息”与“只是重复运转”，会比强迫自己放空更具体。', short: '事情结束后仍在重复处理' },
-  input_fatigue: { body: '当信息和交流继续增加时，你对输入的耐心会先下降。这个信号不等于拒绝关系，而是在提示当前的处理容量已经接近边界。', short: '对信息和交流的耐心先下降' },
+const FOCUS_SCENE: Record<Focus, { online: string; overload: string }> = {
+  energy: { online: '投入与恢复之间', overload: '能量开始改变的最早一刻' },
+  strength: { online: '能力形成具体成果时', overload: '优势开始转为代价的位置' },
+  relationship: { online: '合作或关系互动中', overload: '责任和回应开始失去边界的位置' },
+  overall: { online: '一段完整的工作或生活循环里', overload: '原有节奏最先失去比例的位置' },
 };
 
-const FOCUS_QUESTIONS: Record<Focus, (effective: string, overload: string) => string> = {
-  energy: (effective, overload) => `最近一次${overload}时，我是在通过${effective}恢复推进，还是已经越过了需要停下来的临界点？`,
-  strength: (effective, overload) => `当我能够依靠${effective}发挥时，优势形成了什么具体结果；而${overload}又最早从哪里出现？`,
-  relationship: (effective, overload) => `在一次具体互动中，${effective}是在帮助关系向前，还是我已经出现${overload}却仍继续回应？`,
-  overall: (effective, overload) => `当${effective}不再成立时，我是否会先出现${overload}；这两者之间有没有一个可以更早辨认的转折点？`,
-};
-
-function sampleTimes(hour: HourOption): [number, number][] {
-  if (hour === 'unknown') return [[0, 0], [12, 0], [23, 59]];
-  const [start, end] = HOUR_RANGES[hour];
-  const middleMinutes = Math.floor(((start[0] * 60 + start[1]) + (end[0] * 60 + end[1])) / 2);
-  return [start, [Math.floor(middleMinutes / 60), middleMinutes % 60], end];
+function isProducer(candidate: Element, target: Element) {
+  return PRODUCES[candidate] === target;
 }
 
-function calculateAt(year: number, month: number, day: number, hour: number, minute: number, sect: 1 | 2) {
-  const lunar = Solar.fromYmdHms(year, month, day, hour, minute, 0).getLunar();
+function channelFor(dayMaster: string, targetStem: string): Channel {
+  return TEN_GOD_GROUP[LunarUtil.SHI_SHEN[dayMaster + targetStem]] ?? 'peer';
+}
+
+function calculateChart(data: FormData) {
+  const [hour, minute] = data.hour === 'unknown' ? [12, 0] : HOUR_MIDDLE[data.hour as Exclude<HourOption, 'unknown'>];
+  const lunar = Solar.fromYmdHms(Number(data.year), Number(data.month), Number(data.day), hour, minute, 0).getLunar();
   const eight = lunar.getEightChar();
-  eight.setSect(sect);
-  return {
-    pillars: [eight.getYear(), eight.getMonth(), eight.getDay(), eight.getTime()] as string[],
-    dayMaster: eight.getDayGan() as string,
-    monthStem: eight.getMonthGan() as string,
-    monthBranch: eight.getMonthZhi() as string,
-    yearStem: eight.getYearGan() as string,
-    hourStem: eight.getTimeGan() as string,
-  };
+  eight.setSect(2);
+  const pillars = [eight.getYear(), eight.getMonth(), eight.getDay(), eight.getTime()] as string[];
+  const stems = pillars.map(item => item.slice(0, 1));
+  const branches = pillars.map(item => item.slice(1, 2));
+  return { pillars, stems, branches, dayMaster: stems[2], monthBranch: branches[1] };
 }
 
-function groupFor(dayMaster: string, target: string): Channel {
-  return TEN_GOD_GROUP[LunarUtil.SHI_SHEN[dayMaster + target]];
+function strengthOf(dayMaster: string, stems: string[], branches: string[]): { level: Strength; roots: number; seal: number } {
+  const dayElement = STEM_ELEMENT[dayMaster];
+  let support = 0;
+  let drain = 0;
+  let roots = 0;
+  let seal = 0;
+  const inspect = (stem: string, weight: number) => {
+    const element = STEM_ELEMENT[stem];
+    if (!element) return;
+    if (element === dayElement) { support += weight; roots += weight; return; }
+    if (isProducer(element, dayElement)) { support += weight * 0.85; seal += weight; return; }
+    if (PRODUCES[dayElement] === element) drain += weight * 0.75;
+    else if (CONTROLS[dayElement] === element) drain += weight * 0.9;
+    else if (CONTROLS[element] === dayElement) drain += weight;
+  };
+  stems.forEach((stem, index) => { if (index !== 2) inspect(stem, index === 1 ? 1.25 : 1); });
+  branches.forEach((branch, branchIndex) => {
+    const hidden = (LunarUtil.ZHI_HIDE_GAN[branch] ?? []) as string[];
+    hidden.forEach((stem, hiddenIndex) => inspect(stem, branchIndex === 1 ? (hiddenIndex === 0 ? 2.8 : 1.15) : (hiddenIndex === 0 ? 1.35 : .55)));
+  });
+  const difference = support - drain;
+  return { level: difference > 1.75 ? 'strong' : difference < -1.75 ? 'weak' : 'balanced', roots: Math.round(roots), seal: Math.round(seal) };
 }
 
-function deriveLiteChart(data: FormData) {
-  const year = Number(data.year), month = Number(data.month), day = Number(data.day);
-  const times = sampleTimes(data.hour as HourOption);
-  const samples = times.flatMap(([hour, minute]) => ([1, 2] as const).map(sect => calculateAt(year, month, day, hour, minute, sect)));
-  const pillarKeys = new Set(samples.map(item => item.pillars.join('|')));
-  const dayMasters = new Set(samples.map(item => item.dayMaster));
-  const monthBranches = new Set(samples.map(item => item.monthBranch));
-  const ambiguous = data.hour === 'unknown' || pillarKeys.size > 1 || dayMasters.size > 1 || monthBranches.size > 1;
-  const primary = samples[3];
+function allChannels(dayMaster: string, stems: string[], branches: string[]) {
+  const channels = new Set<Channel>();
+  stems.forEach((stem, index) => { if (index !== 2) channels.add(channelFor(dayMaster, stem)); });
+  branches.forEach(branch => ((LunarUtil.ZHI_HIDE_GAN[branch] ?? []) as string[]).forEach(stem => channels.add(channelFor(dayMaster, stem))));
+  return channels;
+}
 
-  if (ambiguous) {
-    const safeMonth = monthBranches.size === 1 ? primary.monthBranch : month <= 3 ? '卯' : month <= 6 ? '午' : month <= 9 ? '酉' : '子';
-    return { mode: 'fallback' as const, season: SEASON_BY_MONTH[safeMonth], channel: null };
-  }
+function patternSupport(channel: Channel, channels: Set<Channel>, strength: Strength) {
+  if (channel === 'input') return channels.has('output') ? '原局同时存在把理解转为表达的出口' : '理解与准备较多，向外形成结果的通道需要被主动建立';
+  if (channel === 'output') return channels.has('result') ? '输出之后有现实对象与结果承接' : '表达和能力存在，但成果承接与结束标准不够清楚';
+  if (channel === 'result') return strength !== 'weak' ? '主体具备承接目标与资源的基础' : '现实目标较清楚，但承载条件需要先被补足';
+  if (channel === 'rule') return channels.has('input') ? '责任与标准能够通过理解、凭据和方法得到承接' : '外部标准较清楚，内部方法与缓冲需要主动建立';
+  return channels.has('output') ? '主体力量能够通过行动或表达向外流动' : '自主力量较集中，需要明确出口与资源边界';
+}
 
-  const monthMainStem = LunarUtil.ZHI_HIDE_GAN[primary.monthBranch][0] as string;
-  const monthGroup = groupFor(primary.dayMaster, monthMainStem);
-  const groups = [
-    monthGroup,
-    groupFor(primary.dayMaster, primary.monthStem),
-    groupFor(primary.dayMaster, primary.yearStem),
-    groupFor(primary.dayMaster, primary.hourStem),
-  ];
-  const qualified = groups.filter(group => group === monthGroup).length >= 2;
-  return {
-    mode: qualified ? 'structural_candidate' as const : 'fallback' as const,
-    season: SEASON_BY_MONTH[primary.monthBranch],
-    channel: qualified ? monthGroup : null,
-  };
+function joinLabels<T extends string>(values: T[], labels: Record<T, string>) {
+  return values.map(value => labels[value]).join('、');
 }
 
 export function generateReport(data: FormData): BaseToneReport {
-  const chart = deriveLiteChart(data);
-  const effective = EFFECTIVE_COPY[data.effective as Effective];
-  const overload = OVERLOAD_COPY[data.overload as Overload];
-  const title = chart.channel ? TITLES[chart.season][chart.channel] : FALLBACK_TITLES[chart.season];
-  const core = chart.channel
-    ? `${CHANNEL_COPY[chart.channel]}结合你当前选择的状态条件，这条通道更适合被理解为一个可观察的起点，而不是对你的固定定义。`
-    : `这次信息不足以形成唯一、稳定的简化结构，因此不把某一种命理解释写成你的固定特征。你的现实选择仍然给出了一个清楚入口：留意自己在什么条件下能够持续，以及消耗最早从哪里出现。`;
+  const chart = calculateChart(data);
+  const { stems, branches, dayMaster, monthBranch, pillars } = chart;
+  const dayElement = STEM_ELEMENT[dayMaster] ?? 'earth';
+  const dayPolarity = STEM_POLARITY[dayMaster] ?? 'yang';
+  const dayPillar = pillars[2];
+  const monthHidden = (LunarUtil.ZHI_HIDE_GAN[monthBranch] ?? []) as string[];
+  const monthMainStem = monthHidden[0];
+  const visibleStems = [stems[0], stems[1], stems[3]];
+  const revealedStem = monthHidden.find(stem => visibleStems.includes(stem));
+  const patternStem = revealedStem ?? monthMainStem;
+  const tenGod = LunarUtil.SHI_SHEN[dayMaster + patternStem] ?? '比肩';
+  const channel = channelFor(dayMaster, patternStem);
+  const strength = strengthOf(dayMaster, stems, branches);
+  const channels = allChannels(dayMaster, stems, branches);
+  const season = SEASON_BY_MONTH[monthBranch] ?? 'spring';
+  const support = patternSupport(channel, channels, strength.level);
+  const patternName = channel === 'peer' ? `${tenGod}当令` : `${tenGod}格候选`;
+  const revealText = revealedStem ? `${monthBranch}月藏干中的${revealedStem}${tenGod}透出，主轴能够在原局表层被看见` : `${monthBranch}月以${monthMainStem}为本气，但月令主轴没有直接透出，更多通过具体情境显现`;
+  const rootText = strength.roots >= 3 ? '根气较明确，内部支点能够参与承载' : strength.roots > 0 ? '原局有根，但支点并非在所有场景都同样稳定' : '可直接使用的根气有限，承载更依赖印星、环境支持与清楚边界';
+  const balanceText = strength.level === 'strong'
+    ? '日主在原局中偏有力量，重点不是继续增加推动，而是为已有力量安排出口与边界'
+    : strength.level === 'weak'
+      ? '日主承载偏紧，重点是先增加支点、信息与可控范围，再扩大输出或责任'
+      : '日主在中和附近，真正影响状态的是不同力量能否按顺序衔接，而非单纯增减某一种特质';
+  const supportCount = [channel === 'output' && channels.has('result'), channel === 'rule' && channels.has('input'), channel === 'input' && channels.has('output'), channel === 'peer' && channels.has('output'), channel === 'result' && strength.level !== 'weak'].filter(Boolean).length;
+  const statusText = supportCount ? '已经具备一部分成立与流通条件' : '主轴存在，但成立所需的承接条件并不完整';
+  const effectiveCalibration = joinLabels(data.effective, EFFECTIVE_LABEL);
+  const overloadCalibration = joinLabels(data.overload, OVERLOAD_LABEL);
+  const scene = FOCUS_SCENE[data.focus as Focus];
+  const functionCopy = CHANNEL_FUNCTION[channel];
 
   return {
     productName: '识己 · 底色',
-    contentVersion: '1.0',
-    mode: chart.mode,
-    title,
-    subtitle: '一张关于你如何进入状态、又在何时开始消耗的观察卡',
-    coreDescription: core,
-    effectiveCondition: effective.body,
-    overloadSignal: overload.body,
-    observationQuestion: FOCUS_QUESTIONS[data.focus as Focus](effective.short, overload.short),
-    boundaryNote: chart.mode === 'structural_candidate'
-      ? '这张卡使用简化出生结构与三项现实选择，提供一个可以继续验证的观察入口；它不等同于完整命盘研判，也不替你定义自己。'
-      : '由于当前时辰或历法边界不足以形成唯一结构，本次主要依据季节意象和你选择的现实状态生成观察入口，不作完整命盘判断。',
-    fullReportBridge: '如果你还想进一步理解：这种运转方式怎样形成、不同维度如何互相影响，以及你当前处在什么阶段，《识己 · 自我认知地图》会在完整资料和双体系研判的基础上继续展开。',
-    imageKey: `${chart.season}-${chart.channel ?? 'fallback'}`,
+    contentVersion: '2.0',
+    poeticTitle: `${BRANCH_IMAGE[dayPillar.slice(1)] ?? '原野'}里的${STEM_IMAGE[dayMaster] ?? '微光'}`,
+    poeticLine: SEASON_LINE[season],
+    dayPillar,
+    monthCommand: monthBranch,
+    mainAxisTitle: AXIS_TITLE[channel][strength.level],
+    mainAxisSummary: `${CHANNEL_ZH[channel]}是这张原局中较清楚的组织力量。它决定的不是固定性格，而是你更容易从哪里调动力量，以及这份力量需要什么条件才能持续。`,
+    originalChart: `原局以${monthBranch}月为令，${revealText}，因此以“${patternName}”作为简化观察入口。这个结构${statusText}：${support}。条件顺畅时，${functionCopy.effective}条件受阻时，问题通常不是没有能力，而是能力难以进入合适的承接位置。`,
+    adjustment: `${balanceText}。从根气与承载看，${rootText}。原局真正需要调节的，是“${CHANNEL_ZH[channel]}持续运转”与“现实承接条件”之间的比例；有效的救应不是压住原有倾向，而是${functionCopy.need}。`,
+    expandCondition: `${functionCopy.effective}在${scene.online}，如果对象、边界和反馈能够彼此对应，这条主轴更容易表现为稳定能力，而不是短时用力。你选择的“${effectiveCalibration}”可以作为现实校准：观察它们是否确实让上述结构更顺畅。`,
+    obstruction: `${functionCopy.overload}阻滞并不等同于能力不足；更常见的情况是，外在任务仍在推进，内部却需要持续调用同一种资源，直到恢复、判断或边界其中一项先退出。`,
+    adjustmentPath: `当${scene.overload}出现时，先${functionCopy.need}，再决定是否继续扩大投入。对这张原局而言，提前恢复结构条件，比在消耗之后单纯要求自己坚持更有效。`,
+    onlineReality: `状态在线时，你会更自然地使用${CHANNEL_ZH[channel]}所代表的功能，把${scene.online}的复杂信息组织成可以继续推进的动作。可验证的重点不是“有没有做到”，而是过程中是否仍保有判断、停止和调整的空间。`,
+    overloadReality: `你选择的“${overloadCalibration}”是这次现实校准提供的早期信号。把它与原局交叉来看，值得留意的不是信号本身，而是信号出现之前，${CHANNEL_ZH[channel]}是否已经连续工作太久，却没有得到${functionCopy.need}这一条件。`,
+    observation: `接下来一周，可以留意${scene.online}的一次具体情境：当“${effectiveCalibration}”出现时，你的判断、表达或行动怎样发生变化？当“${overloadCalibration}”最早出现时，原局需要的承接条件又是从哪一步开始缺位的？`,
+    dayElement,
+    dayPolarity,
+    dayBranchIndex: Math.max(0, BRANCHES.indexOf(dayPillar.slice(1))),
+    season,
   };
 }
 
