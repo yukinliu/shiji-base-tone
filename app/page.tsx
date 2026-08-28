@@ -7,6 +7,7 @@ import { daysInMonth, generateReport } from '../lib/report-engine';
 import type { BaseToneReport, Effective, FormData, HourOption, Overload } from '../lib/report-engine';
 
 const SURVEY_URL = process.env.NEXT_PUBLIC_WJX_URL || 'https://v.wjx.cn/vm/PrWGZvl.aspx';
+const SURVEY_GATING = (process.env.NEXT_PUBLIC_SURVEY_GATING || 'on').toLowerCase();
 
 const HOURS: { value: HourOption; label: string }[] = [
   { value: 'zi_early', label: '子时｜00:00–00:59' }, { value: 'chou', label: '丑时｜01:00–02:59' },
@@ -165,6 +166,7 @@ export default function Home() {
   const [savedImage, setSavedImage] = useState('');
   const [qrCode, setQrCode] = useState('');
   const exportRef = useRef<HTMLElement>(null);
+  const surveyTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const years = useMemo(() => Array.from({ length: currentYear - 1899 }, (_, i) => currentYear - i), [currentYear]);
   const days = useMemo(() => Array.from({ length: daysInMonth(Number(form.year), Number(form.month)) }, (_, i) => i + 1), [form.year, form.month]);
@@ -175,7 +177,7 @@ export default function Home() {
     const params = new URLSearchParams(window.location.search);
     const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
     const surveyDone = params.get('survey') === 'done';
-    const shouldRestore = surveyDone || navigation?.type === 'reload';
+    const shouldRestore = surveyDone || navigation?.type === 'reload' || navigation?.type === 'back_forward';
     if (saved && shouldRestore) {
       try {
         setReport(JSON.parse(saved));
@@ -203,6 +205,10 @@ export default function Home() {
   useEffect(() => {
     const url = `${window.location.origin}${window.location.pathname}`;
     QRCode.toDataURL(url, { width: 240, margin: 2, color: { dark: '#24352d', light: '#fffaf1' } }).then(setQrCode);
+  }, []);
+
+  useEffect(() => () => {
+    if (surveyTimerRef.current) clearInterval(surveyTimerRef.current);
   }, []);
 
   function update<K extends keyof FormData>(key: K, value: FormData[K]) {
@@ -243,7 +249,57 @@ export default function Home() {
 
   function openSurvey() {
     sessionStorage.setItem('shiji-base-tone-survey-started', 'true');
-    window.location.assign(SURVEY_URL);
+    const popup = window.open(SURVEY_URL, '_blank', 'noopener,noreferrer');
+    if (!popup) {
+      const onReturn = () => {
+        if (document.visibilityState === 'visible') {
+          setUnlocked(true);
+          sessionStorage.setItem('shiji-base-tone-unlocked', 'true');
+          document.removeEventListener('visibilitychange', onReturn);
+        }
+      };
+      document.addEventListener('visibilitychange', onReturn);
+      window.location.assign(SURVEY_URL);
+      return;
+    }
+    surveyTimerRef.current = setInterval(() => {
+      if (popup.closed) {
+        if (surveyTimerRef.current) clearInterval(surveyTimerRef.current);
+        surveyTimerRef.current = null;
+        setUnlocked(true);
+        sessionStorage.setItem('shiji-base-tone-unlocked', 'true');
+        setTimeout(() => document.getElementById('save')?.scrollIntoView({ behavior: 'smooth' }), 160);
+      }
+    }, 800);
+  }
+
+  function renderSavePanel() {
+    return (
+      <div className="save-panel" id="save">
+        <h2>谢谢你花时间告诉我这些</h2>
+        <p>你的回答已经收到。</p>
+        <p>认识自己，不是找到一个固定答案，而是逐渐看见自己如何运转，也看见自己仍然拥有怎样的选择。</p>
+        <div className="map-bridge"><h3>从底色，到完整地图</h3><p>如果你还想进一步理解：这种运行方式怎样形成、不同维度如何互相影响，以及你当前处在什么阶段——《识己 · 自我认知八维地图》会在完整资料和现实校准的基础上，展开八个自我认知维度、原局核心解析与行动启示。</p></div>
+        <button className="primary-button" type="button" onClick={saveImage} disabled={saving}>{saving ? '正在制作图片……' : '保存为图片'}<span aria-hidden="true">↓</span></button>
+        {saveMessage && <p className="save-message" role="status">{saveMessage}</p>}
+      </div>
+    );
+  }
+
+  function renderActions() {
+    if (SURVEY_GATING === 'off') return renderSavePanel();
+    if (SURVEY_GATING === 'soft') {
+      return (
+        <>
+          {renderSavePanel()}
+          <a className="survey-soft-link" href={SURVEY_URL} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: '14px', color: '#5f7264', fontSize: '14px', textDecoration: 'underline' }}>欢迎花 1 分钟告诉我们你的真实需求 ↗</a>
+        </>
+      );
+    }
+    if (!unlocked) {
+      return <button className="primary-button" type="button" onClick={openSurvey}>需求调研，解锁保存 ↗</button>;
+    }
+    return renderSavePanel();
   }
 
   async function saveImage() {
@@ -314,16 +370,7 @@ export default function Home() {
         <section className="report-section" id="report">
           <article className={`result-card day-tone-${report.dayElement} polarity-${report.dayPolarity} season-${report.season}`}><ReportContent report={report} /></article>
           <div className="report-actions">
-            {!unlocked ? <button className="primary-button" type="button" onClick={openSurvey}>解锁保存本地<span aria-hidden="true">↗</span></button> : (
-              <div className="save-panel" id="save">
-                <h2>谢谢你花时间告诉我这些</h2>
-                <p>你的回答已经收到。</p>
-                <p>认识自己，不是找到一个固定答案，而是逐渐看见自己如何运转，也看见自己仍然拥有怎样的选择。</p>
-                <div className="map-bridge"><h3>从底色，到完整地图</h3><p>如果你还想进一步理解：这种运行方式怎样形成、不同维度如何互相影响，以及你当前处在什么阶段——《识己 · 自我认知八维地图》会在完整资料和现实校准的基础上，展开八个自我认知维度、原局核心解析与行动启示。</p></div>
-                <button className="primary-button" type="button" onClick={saveImage} disabled={saving}>{saving ? '正在制作图片……' : '保存为图片'}<span aria-hidden="true">↓</span></button>
-                {saveMessage && <p className="save-message" role="status">{saveMessage}</p>}
-              </div>
-            )}
+            {renderActions()}
           </div>
         </section>
       )}
