@@ -231,6 +231,8 @@ button { -webkit-tap-highlight-color: transparent; }
 .export-cover::before { content:"";position:absolute;inset:0;background:radial-gradient(circle at 75% 20%,color-mix(in srgb,var(--accent) 28%,transparent),transparent 36%); }
 .export-cover > * { position:relative;z-index:1; }
 .export-cover .myth-portrait { width:540px;height:540px;margin:40px auto 28px;border-radius:260px 260px 60px 60px; }
+.export-cover .myth-portrait.portrait-img { display:block;background:var(--night);overflow:hidden; }
+.export-cover .myth-portrait.portrait-img { width:540px;height:540px;object-fit:cover; }
 .export-cover > h1 { margin:0;text-align:center;font-family:var(--serif);font-size:66px;font-weight:600; }
 .export-cover > .result-title { font-size:64px; }
 .export-cover .eyebrow,.export-cover .archetype-role,.export-cover .archetype-line { text-align:center; }

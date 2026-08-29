@@ -10,24 +10,60 @@ import {
 
 // 用 <img> + canvas 取图转 data URL：比 fetch 更稳，在微信内置浏览器/手机 Safari 等
 // webview 中也能正常工作（fetch 同源图片在这些环境常被拦截，导致保存图缺图）。
-async function assetToDataUrl(path: string): Promise<string> {
-  const absolute = new URL(path, window.location.href).href;
-  return await new Promise<string>((resolve, reject) => {
+// maxSize：把图缩放到最长边不超过 maxSize，避免导出图（含该 data URL）过大导致手机端
+// 渲染整张 SVG 失败（iOS Safari 对 foreignObject 内联图的尺寸有上限，超限会整张空白）。
+function loadImage(absolute: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth || 1;
-        canvas.height = img.naturalHeight || 1;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) { reject(new Error('无法创建画布上下文')); return; }
-        ctx.drawImage(img, 0, 0);
-        resolve(canvas.toDataURL('image/png'));
-      } catch (error) { reject(error); }
-    };
+    img.onload = () => resolve(img);
     img.onerror = () => reject(new Error(`图片加载失败 ${absolute}`));
     img.src = absolute;
   });
+}
+
+async function assetToDataUrl(path: string, maxSize = 1024): Promise<string> {
+  const absolute = new URL(path, window.location.href).href;
+  const img = await loadImage(absolute);
+  const scale = Math.min(1, maxSize / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.max(1, Math.round(img.naturalWidth * scale));
+  const h = Math.max(1, Math.round(img.naturalHeight * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('无法创建画布上下文');
+  ctx.drawImage(img, 0, 0, w, h);
+  return canvas.toDataURL('image/png');
+}
+
+// 从精灵图裁出「当前原型」那一格，缩放为正方形 data URL。
+// 依据导出卡里 .myth-portrait 的样式（background-size:300% auto；portrait-0..5 的 position）
+// 反向推算源图坐标，得到与页面展示完全一致的一格；输出很小，html-to-image 嵌入最稳。
+async function spriteCellToDataUrl(path: string, index: number, outSize = 480): Promise<string> {
+  const absolute = new URL(path, window.location.href).href;
+  const img = await loadImage(absolute);
+  const W = img.naturalWidth, H = img.naturalHeight;
+  const cols = 3;
+  const BOX = 540; // 导出卡 .myth-portrait 的显示边长
+  const SCALE = 3; // background-size: 300%
+  const scaledW = BOX * SCALE;
+  const scaledH = scaledW * (H / W);
+  const posXpct = [0, 50, 100][index % cols];
+  const posYpct = index < cols ? 10 : 74;
+  const map = scaledW / W;
+  let sx = ((scaledW - BOX) * (posXpct / 100)) / map;
+  let sy = ((scaledH - BOX) * (posYpct / 100)) / map;
+  let sw = BOX / map;
+  let sh = BOX / map;
+  sx = Math.max(0, Math.min(sx, W - 1));
+  sy = Math.max(0, Math.min(sy, H - 1));
+  sw = Math.max(1, Math.min(sw, W - sx));
+  sh = Math.max(1, Math.min(sh, H - sy));
+  const canvas = document.createElement('canvas');
+  canvas.width = outSize; canvas.height = outSize;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('无法创建画布上下文');
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outSize, outSize);
+  return canvas.toDataURL('image/png');
 }
 
 // 跨端复制文本：execCommand 在微信/webview 中最可靠；安全上下文下再尝试异步剪贴板。
@@ -85,7 +121,8 @@ function Brand() {
 }
 
 function MythPortrait({ index, className = '', dataUrl = '' }: { index: number; className?: string; dataUrl?: string }) {
-  return <div className={`myth-portrait portrait-${index} ${className}`} style={{ backgroundImage: dataUrl ? `url("${dataUrl}")` : 'url("myth-archetypes-v1.png?v=5")' }} role="img" aria-label="神话原型人物视觉" />;
+  if (dataUrl) return <img className={`myth-portrait portrait-img ${className}`} src={dataUrl} alt="神话原型人物视觉" draggable={false} />;
+  return <div className={`myth-portrait portrait-${index} ${className}`} style={{ backgroundImage: 'url("myth-archetypes-v1.png?v=5")' }} role="img" aria-label="神话原型人物视觉" />;
 }
 
 function themeClass(report: MythReport) {
@@ -261,10 +298,16 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    // 预加载导出所需图片为 data URL，保证保存时长图在桌面与手机端都能被正确嵌入。
-    assetToDataUrl('/wechat-qr.png').then(setWechatQrDataUrl).catch(() => {});
-    assetToDataUrl('/myth-archetypes-v1.png?v=5').then(setMythPortraitDataUrl).catch(() => {});
+    // 微信二维码缩小内联（避免整张导出 SVG 过大导致手机端渲染失败）。
+    assetToDataUrl('/wechat-qr.png', 400).then(setWechatQrDataUrl).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    // 原型图：等报告生成后，按当前原型索引从精灵图裁出那一格并内联（小图，手机端最稳）。
+    if (!report) return;
+    spriteCellToDataUrl('/myth-archetypes-v1.png?v=5', report.archetypeIndex, 480)
+      .then(setMythPortraitDataUrl).catch(() => {});
+  }, [report?.archetypeIndex]);
 
   useEffect(() => {
     if (stage === 'landing') return;
@@ -350,48 +393,24 @@ export default function Home() {
   async function saveImage() {
     if (!exportRef.current || !report) return;
     setSaving(true); setMessage('');
-    let portraitNodes: HTMLElement[] = [];
-    let previousBackgrounds: string[] = [];
-    let wechatImg: HTMLImageElement | null = null;
-    let previousWechatSrc = '';
     try {
       await document.fonts.ready;
-      // 1) 先把导出卡里的外部图片内联成「绝对地址的 data URL」。
-      //    相对路径的图片在手机端（尤其微信/Safari）常抓不到，内联后桌面与手机端走同一条路径，必一致。
-      try {
-        let portraitDataUrl = mythPortraitDataUrl;
-        if (!portraitDataUrl) portraitDataUrl = await assetToDataUrl('/myth-archetypes-v1.png?v=5');
-        portraitNodes = Array.from(exportRef.current.querySelectorAll<HTMLElement>('.myth-portrait'));
-        previousBackgrounds = portraitNodes.map(node => node.style.backgroundImage);
-        portraitNodes.forEach(node => { node.style.backgroundImage = `url("${portraitDataUrl}")`; });
-      } catch (inlineError) {
-        console.warn('神话原型图内联失败，将按原背景图导出：', inlineError);
-      }
-      try {
-        const target = exportRef.current.querySelector<HTMLImageElement>('img[alt="刘迷糊微信二维码"]');
-        if (target) {
-          let qr = wechatQrDataUrl;
-          if (!qr) qr = await assetToDataUrl('/wechat-qr.png');
-          wechatImg = target; previousWechatSrc = target.src; target.src = qr;
-        }
-      } catch (inlineError) {
-        console.warn('微信二维码内联失败：', inlineError);
-      }
-      // 2) 等所有图片就绪（含刚替换成 data URL 的微信二维码）。
+      // 导出卡里的原型图/微信码均为带 data URL 的 <img>（来自 props，已内联），
+      // 这里只需等它们绘制完成再截图。data URL 内联使桌面与手机端走同一条路径。
       const embeddedImages = Array.from(exportRef.current.querySelectorAll('img'));
       await Promise.all(embeddedImages.map(async image => {
         if (image.complete && image.naturalWidth > 0) return;
-        await new Promise<void>((resolve) => {
-          const timer = window.setTimeout(() => resolve(), 5000);
+        await new Promise<void>(resolve => {
+          const timer = window.setTimeout(() => resolve(), 8000);
           const done = () => { window.clearTimeout(timer); resolve(); };
           image.addEventListener('load', done, { once: true });
           image.addEventListener('error', done, { once: true });
           if (image.complete && image.naturalWidth === 0) image.src = image.src;
         });
       }));
-      // 3) 等一帧，确保刚内联的 data URL 背景图已绘制，再截图（手机端尤其必要）。
-      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-      // 4) 生成导出图（pixelRatio=1，配合放大的导出字号，在手机宽度缩放后仍清晰）。
+      // 等两帧，确保刚内联的 data URL 图片已绘制（手机端尤其必要）。
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve)));
+      // pixelRatio=1，配合放大的导出字号，在手机宽度缩放后仍清晰。
       const dataUrl = await toPng(exportRef.current, { pixelRatio: 1, cacheBust: false, backgroundColor: '#e8eeef' });
       if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) setSavedImage(dataUrl);
       else { const link = document.createElement('a'); link.download = `识己·神话原型-${report.archetype}.png`; link.href = dataUrl; link.click(); }
@@ -400,11 +419,7 @@ export default function Home() {
       console.error('Unable to create result image:', saveError);
       setMessage('图片暂时没有制作成功，请再试一次。');
     }
-    finally {
-      portraitNodes.forEach((node, index) => { node.style.backgroundImage = previousBackgrounds[index] || ''; });
-      if (wechatImg) wechatImg.src = previousWechatSrc;
-      setSaving(false);
-    }
+    finally { setSaving(false); }
   }
 
   async function shareProduct() {
