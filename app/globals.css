@@ -213,6 +213,17 @@ button { -webkit-tap-highlight-color: transparent; }
 .image-modal button { position:sticky;top:0;float:right;width:42px;height:42px;border:0;border-radius:50%;background:#fff;color:var(--ink);font-size:24px;z-index:2; }
 .image-modal img { width:100%;display:block;margin-top:12px;box-shadow:0 20px 70px rgba(0,0,0,.45); }
 
+/* 微信内分享引导浮层：静态站点无法用 API 唤起原生分享面板，引导用户点右上角 ··· */
+.share-guide { position:fixed;inset:0;z-index:90;background:rgba(5,21,28,.82);backdrop-filter:blur(12px);display:grid;place-items:center;padding:24px; }
+.share-guide-card { position:relative;width:min(100%,460px);background:var(--paper-light);border-radius:28px;padding:34px 26px 26px;text-align:center;box-shadow:0 28px 90px rgba(0,0,0,.4); }
+.share-guide-corner { position:absolute;top:-64px;right:6px;color:#fff;font-size:40px;line-height:1;font-weight:700; }
+.share-guide-corner::after { content:"";position:absolute;top:34px;right:14px;border:14px solid transparent;border-top-color:#fff;transform:rotate(-18deg); }
+.share-guide-title { margin:6px 0 14px;font-family:var(--serif);font-size:30px;color:var(--ink); }
+.share-guide-card > p:not(.share-guide-note) { color:#4a5854;line-height:1.8;font-size:16px; }
+.share-guide-card b { color:var(--night); }
+.share-guide-note { margin-top:14px;color:var(--muted);font-size:13px; }
+.share-guide-card .primary-button { width:100%;margin-top:20px; }
+
 /* Export */
 .export-stage { position:fixed;left:-20000px;top:0;width:900px;pointer-events:none; }
 .export-card { width:900px;background:var(--paper);color:var(--ink);font-family:var(--sans); }

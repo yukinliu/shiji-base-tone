@@ -8,17 +8,53 @@ import {
   type AnswerKey, type BirthData, type DimensionKey, type Focus, type HourOption, type MythReport,
 } from '../lib/report-engine';
 
-async function fetchToDataUrl(url: string): Promise<string> {
-  const absolute = new URL(url, window.location.href).href;
-  const resp = await fetch(absolute, { cache: 'force-cache' });
-  if (!resp.ok) throw new Error(`图片加载失败 ${resp.status}: ${url}`);
-  const blob = await resp.blob();
+// 用 <img> + canvas 取图转 data URL：比 fetch 更稳，在微信内置浏览器/手机 Safari 等
+// webview 中也能正常工作（fetch 同源图片在这些环境常被拦截，导致保存图缺图）。
+async function assetToDataUrl(path: string): Promise<string> {
+  const absolute = new URL(path, window.location.href).href;
   return await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error ?? new Error('读取图片失败'));
-    reader.readAsDataURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || 1;
+        canvas.height = img.naturalHeight || 1;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { reject(new Error('无法创建画布上下文')); return; }
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL('image/png'));
+      } catch (error) { reject(error); }
+    };
+    img.onerror = () => reject(new Error(`图片加载失败 ${absolute}`));
+    img.src = absolute;
   });
+}
+
+// 跨端复制文本：execCommand 在微信/webview 中最可靠；安全上下文下再尝试异步剪贴板。
+function copyText(text: string): boolean {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '0';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length);
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    if (ok) return true;
+  } catch { /* 忽略，走下方兜底 */ }
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch { /* 忽略 */ }
+  return false;
 }
 
 type Stage = 'landing' | 'intro' | 'questions' | 'birth' | 'focus' | 'making' | 'reveal' | 'report';
@@ -48,8 +84,8 @@ function Brand() {
   return <div className="brand"><span className="brand-mark">识</span><span>刘迷糊丨自我探索</span></div>;
 }
 
-function MythPortrait({ index, className = '' }: { index: number; className?: string }) {
-  return <div className={`myth-portrait portrait-${index} ${className}`} style={{ backgroundImage: 'url("myth-archetypes-v1.png?v=5")' }} role="img" aria-label="神话原型人物视觉" />;
+function MythPortrait({ index, className = '', dataUrl = '' }: { index: number; className?: string; dataUrl?: string }) {
+  return <div className={`myth-portrait portrait-${index} ${className}`} style={{ backgroundImage: dataUrl ? `url("${dataUrl}")` : 'url("myth-archetypes-v1.png?v=5")' }} role="img" aria-label="神话原型人物视觉" />;
 }
 
 function themeClass(report: MythReport) {
@@ -138,14 +174,14 @@ function ReportSections({ report, exportMode = false }: { report: MythReport; ex
   );
 }
 
-function ExportCard({ report, productQr }: { report: MythReport; productQr: string }) {
+function ExportCard({ report, productQr, wechatQrDataUrl = '', portraitDataUrl = '' }: { report: MythReport; productQr: string; wechatQrDataUrl?: string; portraitDataUrl?: string }) {
   return (
     <article className={`export-card tone-${report.dayElement} season-${report.season} ${themeClass(report)}`}>
       <div className="export-cover">
         <SceneAtmosphere />
         <Brand />
         <p className="eyebrow">我的神话原型</p>
-        <MythPortrait index={report.archetypeIndex} />
+        <MythPortrait index={report.archetypeIndex} dataUrl={portraitDataUrl} />
         <h1 className="result-title">{report.combinedTitle}</h1>
         <p className="archetype-role">{report.archetypeTitle}</p>
         <p className="archetype-line">{report.archetypeLine}</p>
@@ -156,7 +192,7 @@ function ExportCard({ report, productQr }: { report: MythReport; productQr: stri
       <div className="export-sign">刘迷糊丨自我探索 · SHIJI</div>
       <div className="qr-zone">
         <div className="qr-item"><div><strong>制作你的《识己 · 神话原型》</strong><p>你的生命故事里，住着哪位神话人物？</p></div>{productQr && <img src={productQr} alt="产品二维码" />}</div>
-        <div className="qr-item"><div><strong>添加刘迷糊</strong><p>咨询《识己 · 自我认知八维地图》</p></div><div className="wechat-qr-crop"><img src="wechat-qr.png" alt="刘迷糊微信二维码" /></div></div>
+        <div className="qr-item"><div><strong>添加刘迷糊</strong><p>咨询《识己 · 自我认知八维地图》</p></div><div className="wechat-qr-crop">{wechatQrDataUrl ? <img src={wechatQrDataUrl} alt="刘迷糊微信二维码" /> : <img src="wechat-qr.png" alt="刘迷糊微信二维码" />}</div></div>
       </div>
     </article>
   );
@@ -179,6 +215,7 @@ export default function Home() {
   const [savedImage, setSavedImage] = useState('');
   const [hasSaved, setHasSaved] = useState(false);
   const [message, setMessage] = useState('');
+  const [showShareGuide, setShowShareGuide] = useState(false);
   const [productQr, setProductQr] = useState('');
   const [wechatQrDataUrl, setWechatQrDataUrl] = useState('');
   const [mythPortraitDataUrl, setMythPortraitDataUrl] = useState('');
@@ -225,8 +262,8 @@ export default function Home() {
 
   useEffect(() => {
     // 预加载导出所需图片为 data URL，保证保存时长图在桌面与手机端都能被正确嵌入。
-    fetchToDataUrl('/wechat-qr.png').then(setWechatQrDataUrl).catch(() => {});
-    fetchToDataUrl('/myth-archetypes-v1.png?v=5').then(setMythPortraitDataUrl).catch(() => {});
+    assetToDataUrl('/wechat-qr.png').then(setWechatQrDataUrl).catch(() => {});
+    assetToDataUrl('/myth-archetypes-v1.png?v=5').then(setMythPortraitDataUrl).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -323,7 +360,7 @@ export default function Home() {
       //    相对路径的图片在手机端（尤其微信/Safari）常抓不到，内联后桌面与手机端走同一条路径，必一致。
       try {
         let portraitDataUrl = mythPortraitDataUrl;
-        if (!portraitDataUrl) portraitDataUrl = await fetchToDataUrl('/myth-archetypes-v1.png?v=5');
+        if (!portraitDataUrl) portraitDataUrl = await assetToDataUrl('/myth-archetypes-v1.png?v=5');
         portraitNodes = Array.from(exportRef.current.querySelectorAll<HTMLElement>('.myth-portrait'));
         previousBackgrounds = portraitNodes.map(node => node.style.backgroundImage);
         portraitNodes.forEach(node => { node.style.backgroundImage = `url("${portraitDataUrl}")`; });
@@ -334,7 +371,7 @@ export default function Home() {
         const target = exportRef.current.querySelector<HTMLImageElement>('img[alt="刘迷糊微信二维码"]');
         if (target) {
           let qr = wechatQrDataUrl;
-          if (!qr) qr = await fetchToDataUrl('/wechat-qr.png');
+          if (!qr) qr = await assetToDataUrl('/wechat-qr.png');
           wechatImg = target; previousWechatSrc = target.src; target.src = qr;
         }
       } catch (inlineError) {
@@ -352,7 +389,9 @@ export default function Home() {
           if (image.complete && image.naturalWidth === 0) image.src = image.src;
         });
       }));
-      // 3) 生成导出图（pixelRatio=1，配合放大的导出字号，在手机宽度缩放后仍清晰）。
+      // 3) 等一帧，确保刚内联的 data URL 背景图已绘制，再截图（手机端尤其必要）。
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      // 4) 生成导出图（pixelRatio=1，配合放大的导出字号，在手机宽度缩放后仍清晰）。
       const dataUrl = await toPng(exportRef.current, { pixelRatio: 1, cacheBust: false, backgroundColor: '#e8eeef' });
       if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) setSavedImage(dataUrl);
       else { const link = document.createElement('a'); link.download = `识己·神话原型-${report.archetype}.png`; link.href = dataUrl; link.click(); }
@@ -372,22 +411,14 @@ export default function Home() {
     if (!report) return;
     const pageUrl = `${window.location.origin}${window.location.pathname}`;
     const text = `我是${report.combinedTitle}。你的生命故事里，住着哪位神话人物？\n${pageUrl}`;
-    const copyViaExecCommand = () => {
-      try {
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        ta.style.position = 'fixed';
-        ta.style.left = '-9999px';
-        ta.style.top = '0';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.focus(); ta.select();
-        const ok = document.execCommand('copy');
-        document.body.removeChild(ta);
-        return ok;
-      } catch { return false; }
-    };
     const isWeChat = /micromessenger/i.test(navigator.userAgent);
+    if (isWeChat) {
+      // 微信内置浏览器无法用 API 唤起原生分享面板（需后端签名的 JS-SDK）。
+      // 改为：顺手复制链接 + 弹出引导浮层，让用户点右上角 ··· 分享。
+      copyText(text);
+      setShowShareGuide(true);
+      return;
+    }
     try {
       if (navigator.share) {
         try {
@@ -395,18 +426,15 @@ export default function Home() {
           return;
         } catch (shareError) {
           if ((shareError as DOMException)?.name === 'AbortError') return;
-          // 其他错误（如微信内被拦截）继续走复制兜底
+          // 其他错误（如被拦截）继续走复制兜底
         }
       }
-      let copied = false;
-      if (navigator.clipboard && window.isSecureContext) {
-        copied = await navigator.clipboard.writeText(text).then(() => true).catch(() => false);
-      }
-      if (!copied) copied = copyViaExecCommand();
-      if (copied) setMessage(isWeChat ? '链接已复制，去微信粘贴给朋友吧 👌' : '链接已复制，可以发给朋友了。');
+      const copied = copyText(text);
+      if (copied) setMessage('链接已复制，可以发给朋友了。');
       else setMessage('复制失败，请长按上方网址手动发送给朋友。');
     } catch {
-      if (copyViaExecCommand()) setMessage(isWeChat ? '链接已复制，去微信粘贴给朋友吧 👌' : '链接已复制，可以发给朋友了。');
+      const copied = copyText(text);
+      if (copied) setMessage('链接已复制，可以发给朋友了。');
       else setMessage('复制失败，请长按上方网址手动发送给朋友。');
     }
   }
@@ -462,7 +490,19 @@ export default function Home() {
 
       {savedImage && <div className="image-modal"><div><button onClick={() => setSavedImage('')} aria-label="关闭">×</button><p>长按图片保存到相册</p><img src={savedImage} alt="识己神话原型长图" /></div></div>}
 
-      {report && <div className="export-stage" aria-hidden="true"><div ref={exportRef}><ExportCard report={report} productQr={productQr} /></div></div>}
+      {showShareGuide && (
+        <div className="share-guide" role="dialog" aria-modal="true" onClick={() => setShowShareGuide(false)}>
+          <div className="share-guide-card" onClick={event => event.stopPropagation()}>
+            <div className="share-guide-corner"><span>···</span></div>
+            <p className="share-guide-title">分享给朋友</p>
+            <p>点击右上角 <b>···</b>，选择「发送给朋友」分享给好友，或「分享到朋友圈」。</p>
+            <p className="share-guide-note">链接已自动复制，也可以直接粘贴给朋友 👌</p>
+            <button className="primary-button" type="button" onClick={() => setShowShareGuide(false)}>知道了</button>
+          </div>
+        </div>
+      )}
+
+      {report && <div className="export-stage" aria-hidden="true"><div ref={exportRef}><ExportCard report={report} productQr={productQr} wechatQrDataUrl={wechatQrDataUrl} portraitDataUrl={mythPortraitDataUrl} /></div></div>}
     </main>
   );
 }
