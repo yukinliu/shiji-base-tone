@@ -473,7 +473,7 @@ export default function Home() {
     <main className={`app stage-${stage}`}>
       {stage === 'landing' && (
         <section className="landing-screen">
-          <div className="landing-art"><img src="myth-archetypes-v1.png" alt="六位神话人物" /></div>
+          <div className="landing-art"><img src="myth-archetypes-hero.jpg" alt="六位神话人物" /></div>
           <div className="landing-overlay" />
           <div className="landing-content"><Brand /><p className="product-name">识己 · 神话原型</p><h1>你的生命故事里，<br />住着哪位神话人物？</h1><p className="landing-copy">看见与你最接近的神话原型，以及这股力量落在怎样的生命底色里。</p><button className="primary-button light" onClick={startFresh}>看见我的神话<span>→</span></button><p className="privacy-line">约3分钟 · 20题 · 完全隐私</p>{pendingAvailable && <button className="resume-button" onClick={continuePending}>继续刚才的报告</button>}</div>
         </section>
