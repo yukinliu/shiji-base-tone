@@ -35,40 +35,6 @@ async function assetToDataUrl(path: string, maxSize = 1024): Promise<string> {
   return canvas.toDataURL('image/png');
 }
 
-// 从精灵图裁出「当前原型」那一格，缩放为正方形 data URL。
-// 依据导出卡里 .myth-portrait 的样式（background-size:300% auto；portrait-0..5 的 position）
-// 反向推算源图坐标，得到与页面展示完全一致的一格；输出很小，html-to-image 嵌入最稳。
-async function spriteCellToDataUrl(path: string, index: number, outSize = 480, preloadedImg?: HTMLImageElement): Promise<string> {
-  const absolute = new URL(path, window.location.href).href;
-  // 优先用「挂载时已预加载」的精灵图（内存中），避免保存/报告阶段再走网络加载 3.97MB 整图。
-  const img = (preloadedImg && preloadedImg.complete && preloadedImg.naturalWidth > 0)
-    ? preloadedImg
-    : await loadImage(absolute);
-  const W = img.naturalWidth, H = img.naturalHeight;
-  const cols = 3;
-  const BOX = 540; // 导出卡 .myth-portrait 的显示边长
-  const SCALE = 3; // background-size: 300%
-  const scaledW = BOX * SCALE;
-  const scaledH = scaledW * (H / W);
-  const posXpct = [0, 50, 100][index % cols];
-  const posYpct = index < cols ? 10 : 74;
-  const map = scaledW / W;
-  let sx = ((scaledW - BOX) * (posXpct / 100)) / map;
-  let sy = ((scaledH - BOX) * (posYpct / 100)) / map;
-  let sw = BOX / map;
-  let sh = BOX / map;
-  sx = Math.max(0, Math.min(sx, W - 1));
-  sy = Math.max(0, Math.min(sy, H - 1));
-  sw = Math.max(1, Math.min(sw, W - sx));
-  sh = Math.max(1, Math.min(sh, H - sy));
-  const canvas = document.createElement('canvas');
-  canvas.width = outSize; canvas.height = outSize;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('无法创建画布上下文');
-  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outSize, outSize);
-  return canvas.toDataURL('image/png');
-}
-
 // 给任意 Promise 套一层超时：超时即 reject，确保 toPng 这类「既不 resolve 也不 reject」的
 // 挂起（超大 SVG data URL 在手机/webview 中 onload/onerror 都不触发）不会让「正在制作图片」永远灰着。
 function withTimeout<T>(promise: Promise<T>, ms: number, label = '操作'): Promise<T> {
@@ -147,19 +113,13 @@ function Brand() {
   return <div className="brand"><span className="brand-mark">识</span><span>刘迷糊丨自我探索</span></div>;
 }
 
-function MythPortrait({ index, className = '', dataUrl = '', exportMode = false }: { index: number; className?: string; dataUrl?: string; exportMode?: boolean }) {
-  // 导出卡：始终渲染 <img>（绝不用 CSS 背景）。截图前 saveImage 会用裁好的小图 data URL 覆盖 src，
-  // 这样 html-to-image 永远不会把整张 3.97MB 精灵图内联进 SVG，避免手机端卡死或整张空白。
-  if (exportMode) {
-    // 关键：dataUrl 为空时绝不回退整张 3.97MB 精灵图 URL——那会让 html-to-image 内联整图、
-    // 在手机/微信 webview 里因 SVG foreignObject 尺寸超限而永久挂起（「正在制作图片」一直灰）。
-    // 但也不能留空 src：html-to-image 会把空 src 当成相对路径去加载当前页，导致 toPng 挂起。
-    // 所以用 1x1 透明 GIF 占位：最坏只是导出图缺原型图，绝不卡死；正常情况 report 阶段已预裁好小图。
-    const FALLBACK = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
-    return <img className={`myth-portrait portrait-img ${className}`} src={dataUrl || FALLBACK} alt="神话原型人物视觉" draggable={false} />;
-  }
-  if (dataUrl) return <img className={`myth-portrait portrait-img ${className}`} src={dataUrl} alt="神话原型人物视觉" draggable={false} />;
-  return <div className={`myth-portrait portrait-${index} ${className}`} style={{ backgroundImage: 'url("myth-archetypes-v1.png?v=5")' }} role="img" aria-label="神话原型人物视觉" />;
+function MythPortrait({ index, className = '', dataUrl = '' }: { index: number; className?: string; dataUrl?: string }) {
+  // 永远用 <img>：
+  // 1. dataUrl（内联小图）优先——导出前会被覆盖成 data URL，html-to-image 不依赖网络。
+  // 2. 否则走预切好的 portraits/{index}.jpg（约 60KB），避免页面/保存阶段加载 3.97MB 精灵图。
+  //    这是“长时间灰度没下文”的物理根因：myth-archetypes-v1.png 高达 3.97MB，直连都要 50s+。
+  const src = dataUrl || `portraits/${index}.jpg`;
+  return <img className={`myth-portrait portrait-img ${className}`} src={src} alt="神话原型人物视觉" draggable={false} />;
 }
 
 function themeClass(report: MythReport) {
@@ -255,7 +215,7 @@ function ExportCard({ report, productQr, wechatQrDataUrl = '', portraitDataUrl =
         <SceneAtmosphere />
         <Brand />
         <p className="eyebrow">我的神话原型</p>
-        <MythPortrait index={report.archetypeIndex} dataUrl={portraitDataUrl} exportMode />
+        <MythPortrait index={report.archetypeIndex} dataUrl={portraitDataUrl} />
         <h1 className="result-title">{report.combinedTitle}</h1>
         <p className="archetype-role">{report.archetypeTitle}</p>
         <p className="archetype-line">{report.archetypeLine}</p>
@@ -266,7 +226,7 @@ function ExportCard({ report, productQr, wechatQrDataUrl = '', portraitDataUrl =
       <div className="export-sign">刘迷糊丨自我探索 · SHIJI</div>
       <div className="qr-zone">
         <div className="qr-item"><div><strong>制作你的《识己 · 神话原型》</strong><p>你的生命故事里，住着哪位神话人物？</p></div>{productQr && <img src={productQr} alt="产品二维码" />}</div>
-        <div className="qr-item"><div><strong>添加刘迷糊</strong><p>咨询《识己 · 自我认知八维地图》</p></div><div className="wechat-qr-crop">{wechatQrDataUrl ? <img src={wechatQrDataUrl} alt="刘迷糊微信二维码" /> : <img src="wechat-qr.png" alt="刘迷糊微信二维码" />}</div></div>
+        <div className="qr-item"><div><strong>添加刘迷糊</strong><p>咨询《识己 · 自我认知八维地图》</p></div><div className="wechat-qr-crop">{wechatQrDataUrl ? <img src={wechatQrDataUrl} alt="刘迷糊微信二维码" /> : <img src="wechat-qr-400.png" alt="刘迷糊微信二维码" />}</div></div>
       </div>
     </article>
   );
@@ -293,13 +253,6 @@ export default function Home() {
   const [productQr, setProductQr] = useState('');
   const [wechatQrDataUrl, setWechatQrDataUrl] = useState('');
   const [mythPortraitDataUrl, setMythPortraitDataUrl] = useState('');
-  // 预加载精灵图：组件挂载即开始下载，用户填问卷期间通常已就绪；报告/保存阶段裁剪直接用内存中的图，不触发实时网络请求。
-  const spriteImgRef = useRef<HTMLImageElement | null>(null);
-  useEffect(() => {
-    const img = new Image();
-    img.src = '/myth-archetypes-v1.png?v=5';
-    spriteImgRef.current = img;
-  }, []);
   const exportRef = useRef<HTMLDivElement>(null);
   const surveyActive = useRef(false);
   const surveyLeft = useRef(false);
@@ -342,19 +295,17 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    // 微信二维码缩小内联（避免整张导出 SVG 过大导致手机端渲染失败）。
-    assetToDataUrl('/wechat-qr.png', 400).then(setWechatQrDataUrl).catch(() => {});
+    // 微信二维码：用预缩到 400px 的 wechat-qr-400.png（114KB → 比原图 564KB 快 5 倍）。
+    assetToDataUrl('/wechat-qr-400.png', 400).then(setWechatQrDataUrl).catch(() => {});
   }, []);
 
   useEffect(() => {
-    // 原型图：报告生成后，优先用「挂载时已预加载」的精灵图裁出当前原型那一格并内联（小图，手机端最稳）。
-    // 预加载图已在用户填问卷期间下载完，不再依赖保存时实时网络；若尚未就绪才回退实时加载。
+    // 原型图：用预切小图内联成 data URL（约 60KB），html-to-image 不依赖实时网络。
+    // 比起 3.97MB 精灵图，加载/内联都快一个数量级，彻底消除手机端“长时间灰度没下文”。
     if (!report) return;
-    const pre = spriteImgRef.current;
-    const cutter = (pre && pre.complete && pre.naturalWidth > 0)
-      ? spriteCellToDataUrl('/myth-archetypes-v1.png?v=5', report.archetypeIndex, 480, pre)
-      : spriteCellToDataUrl('/myth-archetypes-v1.png?v=5', report.archetypeIndex, 480);
-    cutter.then(setMythPortraitDataUrl).catch(() => {});
+    assetToDataUrl(`portraits/${report.archetypeIndex}.jpg`, 512)
+      .then(setMythPortraitDataUrl)
+      .catch(() => {});
   }, [report?.archetypeIndex]);
 
   useEffect(() => {
@@ -448,8 +399,8 @@ export default function Home() {
       // 任一步失败都用已有 state 兜底，绝不让截图流程卡死。
       let portraitUrl = mythPortraitDataUrl;
       let wechatUrl = wechatQrDataUrl;
-      try { portraitUrl = await withTimeout(spriteCellToDataUrl('/myth-archetypes-v1.png?v=5', report.archetypeIndex, 480), 6000, '裁原型图'); } catch { /* 用已有值兜底 */ }
-      try { if (!wechatUrl) wechatUrl = await withTimeout(assetToDataUrl('/wechat-qr.png', 400), 6000, '裁微信码'); } catch { /* 用已有值兜底 */ }
+      try { portraitUrl = await withTimeout(assetToDataUrl(`portraits/${report.archetypeIndex}.jpg`, 512), 6000, '裁原型图'); } catch { /* 用已有值兜底 */ }
+      try { if (!wechatUrl) wechatUrl = await withTimeout(assetToDataUrl('/wechat-qr-400.png', 400), 6000, '裁微信码'); } catch { /* 用已有值兜底 */ }
       // 用裁好的小图覆盖导出卡里的 <img>，确保截图时绝不会出现整张 3.97MB 精灵图。
       const portraitImg = exportRef.current.querySelector('img.myth-portrait') as HTMLImageElement | null;
       if (portraitImg && portraitUrl) portraitImg.src = portraitUrl;
