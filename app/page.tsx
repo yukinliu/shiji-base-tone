@@ -21,7 +21,7 @@ function loadImage(absolute: string): Promise<HTMLImageElement> {
   });
 }
 
-async function assetToDataUrl(path: string, maxSize = 1024): Promise<string> {
+async function assetToDataUrl(path: string, maxSize = 1024, mimeType: 'image/png' | 'image/jpeg' = 'image/png', quality = 0.92): Promise<string> {
   const absolute = new URL(path, window.location.href).href;
   const img = await loadImage(absolute);
   const scale = Math.min(1, maxSize / Math.max(img.naturalWidth, img.naturalHeight));
@@ -32,7 +32,7 @@ async function assetToDataUrl(path: string, maxSize = 1024): Promise<string> {
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('无法创建画布上下文');
   ctx.drawImage(img, 0, 0, w, h);
-  return canvas.toDataURL('image/png');
+  return mimeType === 'image/jpeg' ? canvas.toDataURL('image/jpeg', quality) : canvas.toDataURL('image/png');
 }
 
 // 给任意 Promise 套一层超时：超时即 reject，确保 toPng 这类「既不 resolve 也不 reject」的
@@ -215,7 +215,13 @@ function ExportCard({ report, productQr, wechatQrDataUrl = '', portraitDataUrl =
         <SceneAtmosphere />
         <Brand />
         <p className="eyebrow">我的神话原型</p>
-        <MythPortrait index={report.archetypeIndex} dataUrl={portraitDataUrl} />
+        {/* WebKit 对 foreignObject 里的 <img dataURL> 支持不稳定，导出卡用 background-image 更稳。 */}
+        <div
+          className="myth-portrait export-portrait"
+          style={{ backgroundImage: portraitDataUrl ? `url(${portraitDataUrl})` : `url(/portraits/${report.archetypeIndex}.jpg)` }}
+          role="img"
+          aria-label="神话原型人物视觉"
+        />
         <h1 className="result-title">{report.combinedTitle}</h1>
         <p className="archetype-role">{report.archetypeTitle}</p>
         <p className="archetype-line">{report.archetypeLine}</p>
@@ -300,10 +306,10 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    // 原型图：用预切小图内联成 data URL（约 60KB），html-to-image 不依赖实时网络。
+    // 原型图：用预切小图内联成 JPEG data URL（比 PNG 小，WebKit foreignObject 更稳）。
     // 比起 3.97MB 精灵图，加载/内联都快一个数量级，彻底消除手机端“长时间灰度没下文”。
     if (!report) return;
-    assetToDataUrl(`portraits/${report.archetypeIndex}.jpg`, 512)
+    assetToDataUrl(`portraits/${report.archetypeIndex}.jpg`, 512, 'image/jpeg', 0.9)
       .then(setMythPortraitDataUrl)
       .catch(() => {});
   }, [report?.archetypeIndex]);
@@ -399,16 +405,28 @@ export default function Home() {
       // 任一步失败都用已有 state 兜底，绝不让截图流程卡死。
       let portraitUrl = mythPortraitDataUrl;
       let wechatUrl = wechatQrDataUrl;
-      try { portraitUrl = await withTimeout(assetToDataUrl(`portraits/${report.archetypeIndex}.jpg`, 512), 6000, '裁原型图'); } catch { /* 用已有值兜底 */ }
+      try { portraitUrl = await withTimeout(assetToDataUrl(`portraits/${report.archetypeIndex}.jpg`, 512, 'image/jpeg', 0.9), 6000, '裁原型图'); } catch { /* 用已有值兜底 */ }
       try { if (!wechatUrl) wechatUrl = await withTimeout(assetToDataUrl('/wechat-qr-400.png', 400), 6000, '裁微信码'); } catch { /* 用已有值兜底 */ }
       // 用裁好的小图覆盖导出卡里的 <img>，确保截图时绝不会出现整张 3.97MB 精灵图。
-      const portraitImg = exportRef.current.querySelector('img.myth-portrait') as HTMLImageElement | null;
-      if (portraitImg && portraitUrl) portraitImg.src = portraitUrl;
+      const exportPortrait = exportRef.current.querySelector('.export-portrait') as HTMLDivElement | null;
+      if (exportPortrait && portraitUrl) exportPortrait.style.backgroundImage = `url(${portraitUrl})`;
       const wechatImg = exportRef.current.querySelector('.wechat-qr-crop img') as HTMLImageElement | null;
       if (wechatImg && wechatUrl) wechatImg.src = wechatUrl;
       // 等所有内联图绘制完成（最长 8s/张，超时也继续，不卡死）。
       const embeddedImages = Array.from(exportRef.current.querySelectorAll('img'));
       await Promise.all(embeddedImages.map(image => imgReady(image, 8000)));
+      // 额外等背景图绘制完成（用于导出卡的 div background-image）。
+      if (exportPortrait && portraitUrl) {
+        await Promise.race([
+          new Promise<void>(resolve => {
+            const tmp = new Image();
+            tmp.onload = () => resolve();
+            tmp.onerror = () => resolve();
+            tmp.src = portraitUrl;
+          }),
+          new Promise<void>(resolve => setTimeout(resolve, 3000)),
+        ]);
+      }
       // 等一小段时间让刚覆盖的 data URL 图片绘制完成。用 setTimeout 而非 requestAnimationFrame：
       // rAF 在部分无头/后台环境会被节流、永不回调，会导致「正在制作图片」永久灰着没下文。
       await new Promise<void>(resolve => setTimeout(resolve, 200));
