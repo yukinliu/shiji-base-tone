@@ -238,22 +238,29 @@ button { -webkit-tap-highlight-color: transparent; }
 .qr-item img { width:126px;height:126px;object-fit:contain;background:#fff;padding:5px; }
 .wechat-qr-crop { width:126px;height:126px;overflow:hidden;background:#fff;border-radius:10px; }
 .wechat-qr-crop img { width:100%;height:100%;object-fit:contain;padding:6px; }
-/* 导出长图字号放大：原图按手机宽度缩放后正文太小，这里整体放大便于保存后阅读 */
-.export-card { font-size:18px; line-height:1.95; }
-.export-cover .archetype-line { font-size:30px; line-height:1.9; }
-.export-content .report-block > h2 { font-size:52px; }
-.export-content .report-block > p { font-size:28px; line-height:2.0; }
-.export-content .dimension-list h3 { font-size:28px; }
-.export-content .dimension-list p { font-size:24px; line-height:1.95; }
-.export-content .imagery-heading h3 { font-size:48px; }
-.export-content .imagery-heading p { font-size:22px; }
-.export-content .value-chain p { font-size:24px; line-height:1.85; }
-.export-content .action-grid p { font-size:24px; line-height:1.85; }
-.export-content .proposition-block p { font-size:24px; line-height:1.9; }
-.export-content .gentle-ending { font-size:22px; }
-.qr-item strong { font-size:26px; }
-.qr-item p { font-size:18px; line-height:1.6; }
-.export-sign { font-size:20px; letter-spacing:.08em; }
+/* 导出长图字号放大：整体放大，确保保存后在手机端按宽度缩放仍清晰可读（桌面/手机共用同一张图） */
+.export-card { font-size:20px; line-height:2.0; }
+.export-cover .eyebrow { font-size:16px; letter-spacing:.2em; }
+.export-cover .archetype-role { font-size:18px; }
+.export-cover .archetype-line { font-size:32px; line-height:1.9; }
+.export-cover .sigil-insight { font-size:18px !important; }
+.export-content .report-block > h2 { font-size:54px; }
+.export-content .report-block > p { font-size:30px; line-height:2.05; }
+.export-content .section-index { font-size:16px !important; }
+.export-content .dimension-list h3 { font-size:30px; }
+.export-content .dimension-list span { font-size:16px; }
+.export-content .dimension-list p { font-size:26px; line-height:2.0; }
+.export-content .imagery-heading h3 { font-size:50px; }
+.export-content .imagery-heading p { font-size:24px; line-height:1.9; }
+.export-content .value-chain p { font-size:26px; line-height:1.95; }
+.export-content .value-chain span { font-size:16px; }
+.export-content .proposition-block p { font-size:26px; line-height:1.95; }
+.export-content .action-grid p { font-size:26px; line-height:1.95; }
+.export-content .action-grid span { font-size:16px; }
+.export-content .gentle-ending { font-size:24px; }
+.qr-item strong { font-size:28px; }
+.qr-item p { font-size:20px; line-height:1.6; }
+.export-sign { font-size:22px; letter-spacing:.08em; }
 
 /* V5: 20 life-imagery palettes (season × value channel) */
 .theme-spring-input{--scene-a:#183936;--scene-b:#745d48;--scene-glow:#9fc4a0;--accent:#b8ca91;--accent-soft:#e0c38d}

@@ -8,6 +8,19 @@ import {
   type AnswerKey, type BirthData, type DimensionKey, type Focus, type HourOption, type MythReport,
 } from '../lib/report-engine';
 
+async function fetchToDataUrl(url: string): Promise<string> {
+  const absolute = new URL(url, window.location.href).href;
+  const resp = await fetch(absolute, { cache: 'force-cache' });
+  if (!resp.ok) throw new Error(`图片加载失败 ${resp.status}: ${url}`);
+  const blob = await resp.blob();
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error ?? new Error('读取图片失败'));
+    reader.readAsDataURL(blob);
+  });
+}
+
 type Stage = 'landing' | 'intro' | 'questions' | 'birth' | 'focus' | 'making' | 'reveal' | 'report';
 
 const SURVEY_URL = process.env.NEXT_PUBLIC_WJX_URL || 'https://v.wjx.cn/vm/PrWGZvl.aspx';
@@ -167,6 +180,8 @@ export default function Home() {
   const [hasSaved, setHasSaved] = useState(false);
   const [message, setMessage] = useState('');
   const [productQr, setProductQr] = useState('');
+  const [wechatQrDataUrl, setWechatQrDataUrl] = useState('');
+  const [mythPortraitDataUrl, setMythPortraitDataUrl] = useState('');
   const exportRef = useRef<HTMLDivElement>(null);
   const surveyActive = useRef(false);
   const surveyLeft = useRef(false);
@@ -206,6 +221,12 @@ export default function Home() {
     } catch { localStorage.removeItem(PENDING_KEY); }
     const siteUrl = `${window.location.origin}${window.location.pathname}`;
     QRCode.toDataURL(siteUrl, { width: 260, margin: 2, color: { dark: '#17323c', light: '#eef3f2' } }).then(setProductQr);
+  }, []);
+
+  useEffect(() => {
+    // 预加载导出所需图片为 data URL，保证保存时长图在桌面与手机端都能被正确嵌入。
+    fetchToDataUrl('/wechat-qr.png').then(setWechatQrDataUrl).catch(() => {});
+    fetchToDataUrl('/myth-archetypes-v1.png?v=5').then(setMythPortraitDataUrl).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -292,31 +313,17 @@ export default function Home() {
   async function saveImage() {
     if (!exportRef.current || !report) return;
     setSaving(true); setMessage('');
+    let portraitNodes: HTMLElement[] = [];
+    let previousBackgrounds: string[] = [];
+    let wechatImg: HTMLImageElement | null = null;
+    let previousWechatSrc = '';
     try {
       await document.fonts.ready;
-      const embeddedImages = Array.from(exportRef.current.querySelectorAll('img'));
-      await Promise.all(embeddedImages.map(async image => {
-        if (image.complete && image.naturalWidth > 0) return;
-        await new Promise<void>((resolve, reject) => {
-          const timer = window.setTimeout(() => reject(new Error(`图片资源加载超时：${image.src}`)), 5000);
-          image.addEventListener('load', () => { window.clearTimeout(timer); resolve(); }, { once: true });
-          image.addEventListener('error', () => { window.clearTimeout(timer); reject(new Error(`图片资源加载失败：${image.src}`)); }, { once: true });
-          if (image.complete && image.naturalWidth === 0) image.src = image.src;
-        });
-      }));
-      // 将神话原型图内联为 data URL，确保 html-to-image 能把它嵌入导出图。
-      // 离屏容器里的 CSS 背景图（尤其是精灵图切片）常常抓不到，导致保存后原型图空白。
-      let portraitNodes: HTMLElement[] = [];
-      let previousBackgrounds: string[] = [];
+      // 1) 先把导出卡里的外部图片内联成「绝对地址的 data URL」。
+      //    相对路径的图片在手机端（尤其微信/Safari）常抓不到，内联后桌面与手机端走同一条路径，必一致。
       try {
-        const portraitResp = await fetch('myth-archetypes-v1.png?v=5');
-        const portraitBlob = await portraitResp.blob();
-        const portraitDataUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = () => reject(new Error('神话原型图读取失败'));
-          reader.readAsDataURL(portraitBlob);
-        });
+        let portraitDataUrl = mythPortraitDataUrl;
+        if (!portraitDataUrl) portraitDataUrl = await fetchToDataUrl('/myth-archetypes-v1.png?v=5');
         portraitNodes = Array.from(exportRef.current.querySelectorAll<HTMLElement>('.myth-portrait'));
         previousBackgrounds = portraitNodes.map(node => node.style.backgroundImage);
         portraitNodes.forEach(node => { node.style.backgroundImage = `url("${portraitDataUrl}")`; });
@@ -324,19 +331,41 @@ export default function Home() {
         console.warn('神话原型图内联失败，将按原背景图导出：', inlineError);
       }
       try {
-        // 降低 pixelRatio，让长图更贴近手机宽度，放大后的导出字号在按宽度缩放后仍清晰可读。
-        const dataUrl = await toPng(exportRef.current, { pixelRatio: 1, cacheBust: false, backgroundColor: '#e8eeef' });
-        if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) setSavedImage(dataUrl);
-        else { const link = document.createElement('a'); link.download = `识己·神话原型-${report.archetype}.png`; link.href = dataUrl; link.click(); }
-      } finally {
-        portraitNodes.forEach((node, index) => { node.style.backgroundImage = previousBackgrounds[index] || ''; });
+        const target = exportRef.current.querySelector<HTMLImageElement>('img[alt="刘迷糊微信二维码"]');
+        if (target) {
+          let qr = wechatQrDataUrl;
+          if (!qr) qr = await fetchToDataUrl('/wechat-qr.png');
+          wechatImg = target; previousWechatSrc = target.src; target.src = qr;
+        }
+      } catch (inlineError) {
+        console.warn('微信二维码内联失败：', inlineError);
       }
+      // 2) 等所有图片就绪（含刚替换成 data URL 的微信二维码）。
+      const embeddedImages = Array.from(exportRef.current.querySelectorAll('img'));
+      await Promise.all(embeddedImages.map(async image => {
+        if (image.complete && image.naturalWidth > 0) return;
+        await new Promise<void>((resolve) => {
+          const timer = window.setTimeout(() => resolve(), 5000);
+          const done = () => { window.clearTimeout(timer); resolve(); };
+          image.addEventListener('load', done, { once: true });
+          image.addEventListener('error', done, { once: true });
+          if (image.complete && image.naturalWidth === 0) image.src = image.src;
+        });
+      }));
+      // 3) 生成导出图（pixelRatio=1，配合放大的导出字号，在手机宽度缩放后仍清晰）。
+      const dataUrl = await toPng(exportRef.current, { pixelRatio: 1, cacheBust: false, backgroundColor: '#e8eeef' });
+      if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) setSavedImage(dataUrl);
+      else { const link = document.createElement('a'); link.download = `识己·神话原型-${report.archetype}.png`; link.href = dataUrl; link.click(); }
       setHasSaved(true); setMessage('图片已经准备好。你可以把它留给自己，也可以邀请朋友一起来看看。');
     } catch (saveError) {
       console.error('Unable to create result image:', saveError);
       setMessage('图片暂时没有制作成功，请再试一次。');
     }
-    finally { setSaving(false); }
+    finally {
+      portraitNodes.forEach((node, index) => { node.style.backgroundImage = previousBackgrounds[index] || ''; });
+      if (wechatImg) wechatImg.src = previousWechatSrc;
+      setSaving(false);
+    }
   }
 
   async function shareProduct() {
