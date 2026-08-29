@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 
-const rawSiteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://yukinliu.github.io/shiji-base-tone/';
+const rawSiteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://shenhua.mihuspace.com/';
 const siteUrl = rawSiteUrl.endsWith('/') ? rawSiteUrl : `${rawSiteUrl}/`;
 const ogUrl = new URL('og-v2.png', siteUrl).toString();
 
