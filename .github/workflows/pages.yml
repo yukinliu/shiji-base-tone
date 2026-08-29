@@ -26,7 +26,9 @@ jobs:
       - run: npm ci
       - run: npm run build:github
         env:
-          NEXT_PUBLIC_SITE_URL: https://yukinliu.github.io/shiji-base-tone
+          NEXT_PUBLIC_WJX_URL: https://v.wjx.cn/vm/PrWGZvl.aspx
+          NEXT_PUBLIC_SURVEY_GATING: on
+          NEXT_PUBLIC_SITE_URL: https://yukinliu.github.io/shiji-base-tone/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: out

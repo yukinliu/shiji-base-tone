@@ -3,11 +3,19 @@
 import { toPng } from 'html-to-image';
 import QRCode from 'qrcode';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { daysInMonth, generateReport } from '../lib/report-engine';
-import type { BaseToneReport, Effective, FormData, HourOption, Overload } from '../lib/report-engine';
+import {
+  FOCUS_OPTIONS, QUESTIONS, daysInMonth, generateMythReport,
+  type AnswerKey, type BirthData, type Focus, type HourOption, type MythReport,
+} from '../lib/report-engine';
+
+type Stage = 'landing' | 'intro' | 'questions' | 'birth' | 'focus' | 'making' | 'reveal' | 'report';
 
 const SURVEY_URL = process.env.NEXT_PUBLIC_WJX_URL || 'https://v.wjx.cn/vm/PrWGZvl.aspx';
 const SURVEY_GATING = (process.env.NEXT_PUBLIC_SURVEY_GATING || 'on').toLowerCase();
+const PENDING_KEY = 'shiji-myth-pending-v4';
+const DRAFT_KEY = 'shiji-myth-draft-v4';
+const SURVEY_STARTED_KEY = 'shiji-myth-survey-started-v4';
+const TWO_HOURS = 2 * 60 * 60 * 1000;
 
 const HOURS: { value: HourOption; label: string }[] = [
   { value: 'zi_early', label: '子时｜00:00–00:59' }, { value: 'chou', label: '丑时｜01:00–02:59' },
@@ -19,136 +27,106 @@ const HOURS: { value: HourOption; label: string }[] = [
   { value: 'zi_late', label: '子时｜23:00–23:59' }, { value: 'unknown', label: '不确定' },
 ];
 
-const FOCUS_OPTIONS = [
-  ['energy', '能量与恢复', '看见自己怎样进入状态，又在何时开始消耗。'],
-  ['strength', '优势与方向', '理解优势依赖什么条件，又在哪里可能转为代价。'],
-  ['relationship', '关系与相处', '观察自己在关系中的位置、责任和回应方式。'],
-  ['overall', '先看整体', '暂时没有特定方向，先从整体运行方式开始。'],
-] as const;
+const EMPTY_BIRTH: BirthData = { year: '', month: '', day: '', hour: '' };
+const ANSWER_KEYS: AnswerKey[] = ['A', 'B', 'C', 'D'];
 
-const EFFECTIVE_OPTIONS = [
-  ['clarity', '方向清楚', '知道这一阶段什么最重要。'],
-  ['autonomy', '有自主空间', '可以按照自己的方式安排方法与节奏。'],
-  ['coordination', '配合顺畅', '沟通和反馈能够真正推动事情。'],
-  ['progress', '进展可见', '能够看见自己的投入正在形成结果。'],
-] as const;
+function Brand() {
+  return <div className="brand"><span className="brand-mark">识</span><span>刘迷糊丨自我探索</span></div>;
+}
 
-const OVERLOAD_OPTIONS = [
-  ['start_delay', '越来越难启动', '明明知道有事要做，却迟迟无法真正进入。'],
-  ['over_response', '持续回应，停不下来', '外部要求不断进入，回应没有清楚的结束边界。'],
-  ['cognitive_carryover', '事情结束，头脑还在处理', '事情已经过去，思考和复盘仍在反复运转。'],
-  ['input_fatigue', '对信息与交流失去耐心', '想暂时从持续输入、沟通和回应中退开。'],
-] as const;
+function MythPortrait({ index, className = '' }: { index: number; className?: string }) {
+  return <div className={`myth-portrait portrait-${index} ${className}`} style={{ backgroundImage: 'url("myth-archetypes-v1.png")' }} role="img" aria-label="神话原型人物视觉" />;
+}
 
-const EMPTY_FORM: FormData = {
-  year: '', month: '', day: '', hour: '', focus: '', effective: [], overload: [],
-};
-
-function ChoiceGroup({
-  name, value, options, onChange,
-}: {
-  name: string;
-  value: string;
-  options: readonly (readonly [string, string, string])[];
-  onChange: (value: string) => void;
-}) {
+function ForceField({ report, compact = false }: { report: MythReport; compact?: boolean }) {
   return (
-    <div className="choice-grid">
-      {options.map(([optionValue, title, detail], index) => (
-        <label className={`choice-card ${value === optionValue ? 'is-selected' : ''}`} key={optionValue}>
-          <input type="radio" name={name} checked={value === optionValue} onChange={() => onChange(optionValue)} />
-          <span className="choice-letter">{String.fromCharCode(65 + index)}</span>
-          <span className="choice-copy"><strong>{title}</strong><small>{detail}</small></span>
-          <span className="choice-check" aria-hidden="true">✓</span>
-        </label>
+    <div className={`force-field ${compact ? 'is-compact' : ''}`} aria-label="四维原型轮廓">
+      <div className="force-orbit" aria-hidden="true" />
+      {report.dimensionResults.map((dimension, index) => (
+        <div
+          className={`force-ray force-${index}`}
+          key={dimension.key}
+          style={{ '--force': `${34 + dimension.value * 58}%`, '--opacity': `${.38 + dimension.value * .55}` } as React.CSSProperties}
+          aria-hidden="true"
+        />
       ))}
+      <div className="force-core" aria-hidden="true">{report.archetype.slice(0, 1)}</div>
+      {!compact && report.dimensionResults.map((dimension, index) => <span className={`force-label label-${index}`} key={dimension.key}>{dimension.label}</span>)}
     </div>
   );
 }
 
-function MultiChoiceGroup<T extends string>({
-  name, values, options, onChange,
-}: {
-  name: string;
-  values: T[];
-  options: readonly (readonly [T, string, string])[];
-  onChange: (values: T[]) => void;
-}) {
-  function toggle(next: T) {
-    if (values.includes(next)) onChange(values.filter(value => value !== next));
-    else if (values.length < 2) onChange([...values, next]);
-  }
-  return (
-    <div className="choice-grid">
-      {options.map(([optionValue, title, detail], index) => {
-        const selected = values.includes(optionValue);
-        const disabled = !selected && values.length >= 2;
-        return (
-          <label className={`choice-card ${selected ? 'is-selected' : ''} ${disabled ? 'is-disabled' : ''}`} key={optionValue}>
-            <input type="checkbox" name={name} checked={selected} disabled={disabled} onChange={() => toggle(optionValue)} />
-            <span className="choice-letter">{String.fromCharCode(65 + index)}</span>
-            <span className="choice-copy"><strong>{title}</strong><small>{detail}</small></span>
-            <span className="choice-check" aria-hidden="true">✓</span>
-          </label>
-        );
-      })}
-    </div>
-  );
-}
-
-function ReportContent({ report }: { report: BaseToneReport }) {
+function ReportSections({ report, exportMode = false }: { report: MythReport; exportMode?: boolean }) {
   return (
     <>
-      <div className={`day-visual branch-${report.dayBranchIndex}`} aria-hidden="true"><span /><span /><span /></div>
-      <header className="report-head">
-        <p className="report-product">识己 · 底色</p>
-        <h2>{report.poeticTitle}</h2>
-        <p className="chart-meta">日柱：{report.dayPillar}<span />月令：{report.monthCommand}</p>
-        <p className="poetic-line">{report.poeticLine}</p>
-      </header>
-
-      <section className="axis-block">
-        <span>命盘主轴</span>
-        <h3>{report.mainAxisTitle}</h3>
-        <p>{report.mainAxisSummary}</p>
-      </section>
-
-      <section className="report-part">
-        <p className="part-kicker">第一部分</p><h3>原局主轴</h3>
-        <div className="report-copy"><h4>原局</h4><p>{report.originalChart}</p></div>
-        <div className="report-copy"><h4>调节</h4><p>{report.adjustment}</p></div>
-      </section>
-
-      <section className="report-part">
-        <p className="part-kicker">第二部分</p><h3>可能的运行方式</h3>
-        <div className="report-copy"><h4>更容易展开的条件</h4><p>{report.expandCondition}</p></div>
-        <div className="report-copy"><h4>容易形成的阻滞</h4><p>{report.obstruction}</p></div>
-        <div className="report-copy"><h4>可以使用的调整路径</h4><p>{report.adjustmentPath}</p></div>
-      </section>
-
-      <section className="report-part reality-part">
-        <p className="part-kicker">第三部分</p><h3>现实中的验证</h3>
-        <div className="reality-grid">
-          <div><h4>当你状态在线时</h4><p>{report.onlineReality}</p></div>
-          <div><h4>当消耗开始时</h4><p>{report.overloadReality}</p></div>
+      <section className="report-block dimensions-block">
+        <p className="section-index">01</p>
+        <h2>你的四维原型轮廓</h2>
+        <p className="section-lead">同一个原型，会在不同的人身上从不同位置出现。</p>
+        {!exportMode && <ForceField report={report} />}
+        <div className="dimension-list">
+          {report.dimensionResults.map(dimension => (
+            <article className={dimension.key === report.strongestDimension ? 'is-strongest' : ''} key={dimension.key}>
+              <div><h3>{dimension.label}</h3>{dimension.key === report.strongestDimension && <span>这股力量在这里最清楚</span>}</div>
+              <p>{dimension.copy}</p>
+            </article>
+          ))}
         </div>
-        <div className="observe-block"><span>可以观察</span><p>{report.observation}</p></div>
+      </section>
+
+      <section className="report-block life-block">
+        <p className="section-index">02</p>
+        <h2>你的生命底色</h2>
+        <div className="imagery-heading"><span>生命意象</span><h3>{report.imageryTitle}</h3><p>{report.imageryLine}</p></div>
+        <p>{report.lifeCopy}</p>
+      </section>
+
+      <section className="report-block value-block">
+        <p className="section-index">03</p>
+        <h2>你更可能怎样形成价值</h2>
+        <div className="value-chain">
+          {report.valueChain.map((node, index) => <div key={node}><span>{String(index + 1).padStart(2, '0')}</span><p>{node}</p></div>)}
+        </div>
+        <p>{report.valueSummary}</p>
+      </section>
+
+      <section className="report-block proposition-block">
+        <p className="section-index">04</p>
+        <h2>这股力量也需要一个落点</h2>
+        <p>{report.coreProposition}</p>
+      </section>
+
+      <section className="report-block action-block">
+        <p className="section-index">05</p>
+        <h2>给此刻的你</h2>
+        <div className="action-grid">
+          <article><span>一个早期信号</span><p>{report.earlySignal}</p></article>
+          <article><span>可以观察</span><p>{report.observation}</p></article>
+          <article><span>一个小行动</span><p>{report.smallAction}</p></article>
+        </div>
+        <p className="gentle-ending">不必急着证明它准确。先把这句话带回生活，看它会不会在某个具体时刻被你认出来。</p>
       </section>
     </>
   );
 }
 
-function ExportCard({ report, qrCode }: { report: BaseToneReport; qrCode: string }) {
+function ExportCard({ report, productQr }: { report: MythReport; productQr: string }) {
   return (
-    <article className={`export-card day-tone-${report.dayElement} polarity-${report.dayPolarity} season-${report.season}`}>
-      <div className="export-paper">
-        <div className="export-brand"><span>识</span>刘迷糊丨自我探索</div>
-        <ReportContent report={report} />
-        <footer className="export-signoff">刘迷糊丨自我探索 · SHIJI</footer>
+    <article className={`export-card tone-${report.dayElement} season-${report.season}`}>
+      <div className="export-cover">
+        <Brand />
+        <p className="eyebrow">我的神话原型</p>
+        <MythPortrait index={report.archetypeIndex} />
+        <h1>{report.combinedTitle}</h1>
+        <p className="archetype-role">{report.archetypeTitle}</p>
+        <p className="archetype-line">{report.archetypeLine}</p>
+        <ForceField report={report} compact />
       </div>
-      <div className="share-tail">
-        <div><strong>扫描制作你的识己 · 底色</strong><p>认识自己，从看见开始。</p></div>
-        {qrCode ? <img src={qrCode} alt="识己底色H5二维码" /> : <div className="qr-placeholder" />}
+      <div className="export-content"><ReportSections report={report} exportMode /></div>
+      <div className="export-sign">刘迷糊丨自我探索 · SHIJI</div>
+      <div className="qr-zone">
+        <div className="qr-item"><div><strong>制作你的《识己 · 神话原型》</strong><p>你的生命故事里，住着哪位神话人物？</p></div>{productQr && <img src={productQr} alt="产品二维码" />}</div>
+        <div className="qr-item"><div><strong>添加刘迷糊</strong><p>咨询《识己 · 自我认知八维地图》</p></div><div className="wechat-qr-crop"><img src="wechat-qr.png" alt="刘迷糊微信二维码" /></div></div>
       </div>
     </article>
   );
@@ -156,234 +134,216 @@ function ExportCard({ report, qrCode }: { report: BaseToneReport; qrCode: string
 
 export default function Home() {
   const currentYear = new Date().getFullYear();
-  const [form, setForm] = useState<FormData>(EMPTY_FORM);
-  const [report, setReport] = useState<BaseToneReport | null>(null);
-  const [making, setMaking] = useState(false);
-  const [unlocked, setUnlocked] = useState(false);
+  const [stage, setStage] = useState<Stage>('landing');
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const [answers, setAnswers] = useState<AnswerKey[]>([]);
+  const [birth, setBirth] = useState<BirthData>(EMPTY_BIRTH);
+  const [focus, setFocus] = useState<Focus | ''>('');
+  const [report, setReport] = useState<MythReport | null>(null);
+  const [makingStep, setMakingStep] = useState(0);
+  const [unlocked, setUnlocked] = useState(SURVEY_GATING !== 'on');
+  const [surveyPrompt, setSurveyPrompt] = useState(false);
+  const [pendingAvailable, setPendingAvailable] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState('');
   const [savedImage, setSavedImage] = useState('');
-  const [qrCode, setQrCode] = useState('');
-  const exportRef = useRef<HTMLElement>(null);
-  const surveyTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [hasSaved, setHasSaved] = useState(false);
+  const [message, setMessage] = useState('');
+  const [productQr, setProductQr] = useState('');
+  const exportRef = useRef<HTMLDivElement>(null);
+  const surveyActive = useRef(false);
+  const surveyLeft = useRef(false);
+  const surveyOpenedAt = useRef(0);
+  const popupTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const years = useMemo(() => Array.from({ length: currentYear - 1899 }, (_, i) => currentYear - i), [currentYear]);
-  const days = useMemo(() => Array.from({ length: daysInMonth(Number(form.year), Number(form.month)) }, (_, i) => i + 1), [form.year, form.month]);
+  const years = useMemo(() => Array.from({ length: currentYear - 1899 }, (_, index) => currentYear - index), [currentYear]);
+  const days = useMemo(() => Array.from({ length: daysInMonth(Number(birth.year), Number(birth.month)) }, (_, index) => index + 1), [birth.year, birth.month]);
+  const currentQuestion = QUESTIONS[questionIndex];
 
   useEffect(() => {
-    const saved = sessionStorage.getItem('shiji-base-tone-report');
-    const savedForm = sessionStorage.getItem('shiji-base-tone-form');
-    const params = new URLSearchParams(window.location.search);
     const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
-    const surveyDone = params.get('survey') === 'done';
-    const shouldRestore = surveyDone || navigation?.type === 'reload' || navigation?.type === 'back_forward';
-    if (saved && shouldRestore) {
+    const restoreDraft = navigation?.type === 'reload' || navigation?.type === 'back_forward';
+    if (restoreDraft) {
       try {
-        setReport(JSON.parse(saved));
-        if (savedForm) setForm(JSON.parse(savedForm));
-      } catch {
-        sessionStorage.removeItem('shiji-base-tone-report');
-        sessionStorage.removeItem('shiji-base-tone-form');
-        sessionStorage.removeItem('shiji-base-tone-unlocked');
-      }
-    } else if (!shouldRestore) {
-      sessionStorage.removeItem('shiji-base-tone-report');
-      sessionStorage.removeItem('shiji-base-tone-form');
-      sessionStorage.removeItem('shiji-base-tone-unlocked');
+        const raw = sessionStorage.getItem(DRAFT_KEY);
+        if (raw) {
+          const draft = JSON.parse(raw);
+          // Restoring an external browser-session snapshot is the purpose of this effect.
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setStage(draft.stage || 'landing'); setAnswers(draft.answers || []); setQuestionIndex(draft.questionIndex || 0);
+          setBirth(draft.birth || EMPTY_BIRTH); setFocus(draft.focus || ''); setReport(draft.report || null);
+        }
+      } catch { sessionStorage.removeItem(DRAFT_KEY); }
+    } else {
+      sessionStorage.removeItem(DRAFT_KEY);
     }
-    if (surveyDone && saved) {
-      sessionStorage.setItem('shiji-base-tone-unlocked', 'true');
-      setUnlocked(true);
-      window.history.replaceState({}, '', window.location.pathname);
-      setTimeout(() => document.getElementById('save')?.scrollIntoView({ behavior: 'smooth' }), 160);
-    } else if (shouldRestore && sessionStorage.getItem('shiji-base-tone-unlocked') === 'true') {
-      setUnlocked(true);
-    }
+    try {
+      const pending = JSON.parse(localStorage.getItem(PENDING_KEY) || 'null');
+      if (pending && pending.expiresAt > Date.now()) {
+        setPendingAvailable(true);
+        if (sessionStorage.getItem(SURVEY_STARTED_KEY) === 'true' && navigation?.type === 'back_forward') {
+          setReport(pending.report); setStage('report'); setUnlocked(true);
+          setTimeout(() => document.getElementById('save-area')?.scrollIntoView({ behavior: 'smooth' }), 160);
+        }
+      } else if (pending) localStorage.removeItem(PENDING_KEY);
+    } catch { localStorage.removeItem(PENDING_KEY); }
+    const siteUrl = `${window.location.origin}${window.location.pathname}`;
+    QRCode.toDataURL(siteUrl, { width: 260, margin: 2, color: { dark: '#17323c', light: '#f4ead8' } }).then(setProductQr);
   }, []);
 
   useEffect(() => {
-    const url = `${window.location.origin}${window.location.pathname}`;
-    QRCode.toDataURL(url, { width: 240, margin: 2, color: { dark: '#24352d', light: '#fffaf1' } }).then(setQrCode);
+    if (stage === 'landing') return;
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ stage, answers, questionIndex, birth, focus, report }));
+  }, [stage, answers, questionIndex, birth, focus, report]);
+
+  useEffect(() => {
+    const unlockOnReturn = () => {
+      if (!surveyActive.current || Date.now() - surveyOpenedAt.current < 900) return;
+      setUnlocked(true); surveyActive.current = false; sessionStorage.setItem(SURVEY_STARTED_KEY, 'returned');
+      setTimeout(() => document.getElementById('save-area')?.scrollIntoView({ behavior: 'smooth' }), 180);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden' && surveyActive.current) surveyLeft.current = true;
+      if (document.visibilityState === 'visible' && surveyLeft.current) unlockOnReturn();
+    };
+    const onFocus = () => { if (surveyLeft.current) unlockOnReturn(); };
+    const onPageShow = (event: PageTransitionEvent) => { if (event.persisted && sessionStorage.getItem(SURVEY_STARTED_KEY)) unlockOnReturn(); };
+    document.addEventListener('visibilitychange', onVisibility); window.addEventListener('focus', onFocus); window.addEventListener('pageshow', onPageShow);
+    return () => { document.removeEventListener('visibilitychange', onVisibility); window.removeEventListener('focus', onFocus); window.removeEventListener('pageshow', onPageShow); if (popupTimer.current) clearInterval(popupTimer.current); };
   }, []);
 
-  useEffect(() => () => {
-    if (surveyTimerRef.current) clearInterval(surveyTimerRef.current);
-  }, []);
-
-  function update<K extends keyof FormData>(key: K, value: FormData[K]) {
-    setForm(previous => ({ ...previous, [key]: value }));
-    setError('');
+  function startFresh() {
+    sessionStorage.removeItem(DRAFT_KEY); setStage('intro'); setAnswers([]); setQuestionIndex(0); setBirth(EMPTY_BIRTH); setFocus(''); setReport(null); setUnlocked(SURVEY_GATING !== 'on');
   }
 
-  function validate() {
-    if (!form.year || !form.month || !form.day || !form.hour) return '请完整填写公历（新历）出生日期和真太阳时辰。';
-    if (new Date(Number(form.year), Number(form.month) - 1, Number(form.day), 12).getTime() > Date.now()) return '出生日期不能晚于今天。';
-    if (!form.focus) return '请选择你现在最想了解的方向。';
-    if (form.effective.length < 1 || form.effective.length > 2 || form.overload.length < 1 || form.overload.length > 2) return '第03、04题请分别选择1—2项。';
+  function chooseAnswer(answer: AnswerKey) {
+    const next = [...answers]; next[questionIndex] = answer; setAnswers(next);
+    if (questionIndex < 17) setTimeout(() => setQuestionIndex(index => index + 1), 220);
+    else setTimeout(() => setStage('birth'), 220);
+  }
+
+  function validateBirth() {
+    if (!birth.year || !birth.month || !birth.day) return '请选择完整的公历出生日期。';
+    if (new Date(Number(birth.year), Number(birth.month) - 1, Number(birth.day), 12).getTime() > Date.now()) return '出生日期不能晚于今天。';
     return '';
   }
 
-  function makeReport(event: React.FormEvent) {
-    event.preventDefault();
-    const nextError = validate();
-    if (nextError) { setError(nextError); return; }
-    setMaking(true);
-    setTimeout(() => {
-      try {
-        const nextReport = generateReport(form);
-        setReport(nextReport);
-        setUnlocked(false);
-        setSaveMessage('');
-        sessionStorage.setItem('shiji-base-tone-report', JSON.stringify(nextReport));
-        sessionStorage.setItem('shiji-base-tone-form', JSON.stringify(form));
-        sessionStorage.removeItem('shiji-base-tone-unlocked');
-        setTimeout(() => document.getElementById('report')?.scrollIntoView({ behavior: 'smooth' }), 100);
-      } catch {
-        setError('这次没有顺利制作，请检查出生信息后再试一次。');
-      } finally {
-        setMaking(false);
-      }
-    }, 520);
+  function continueBirth() {
+    const nextError = validateBirth(); if (nextError) { setError(nextError); return; }
+    setError(''); setStage('focus');
   }
 
-  function openSurvey() {
-    sessionStorage.setItem('shiji-base-tone-survey-started', 'true');
-    const popup = window.open(SURVEY_URL, '_blank', 'noopener,noreferrer');
-    if (!popup) {
-      const onReturn = () => {
-        if (document.visibilityState === 'visible') {
-          setUnlocked(true);
-          sessionStorage.setItem('shiji-base-tone-unlocked', 'true');
-          document.removeEventListener('visibilitychange', onReturn);
+  function makeReport() {
+    if (!focus) { setError('请选择一个此刻最关心的方向。'); return; }
+    try {
+      const next = generateMythReport(answers, birth, focus); setReport(next); setStage('making'); setMakingStep(0);
+      [650, 1350, 2100].forEach((delay, index) => window.setTimeout(() => setMakingStep(index + 1), delay));
+      window.setTimeout(() => setStage('reveal'), 2850);
+    } catch { setError('这次没有顺利制作，请检查信息后再试一次。'); }
+  }
+
+  function continuePending() {
+    try {
+      const pending = JSON.parse(localStorage.getItem(PENDING_KEY) || 'null');
+      if (!pending || pending.expiresAt < Date.now()) throw new Error();
+      setReport(pending.report); setStage('report'); setUnlocked(sessionStorage.getItem(SURVEY_STARTED_KEY) !== null); setPendingAvailable(false);
+    } catch { localStorage.removeItem(PENDING_KEY); setPendingAvailable(false); }
+  }
+
+  function goToSurvey() {
+    if (!report) return;
+    setSurveyPrompt(false);
+    localStorage.setItem(PENDING_KEY, JSON.stringify({ report, expiresAt: Date.now() + TWO_HOURS }));
+    sessionStorage.setItem(SURVEY_STARTED_KEY, 'true');
+    surveyActive.current = true; surveyLeft.current = false; surveyOpenedAt.current = Date.now();
+    const popup = window.open(SURVEY_URL, '_blank');
+    if (popup) {
+      try { popup.opener = null; } catch { /* cross-origin */ }
+      popupTimer.current = setInterval(() => {
+        if (popup.closed) {
+          if (popupTimer.current) clearInterval(popupTimer.current);
+          popupTimer.current = null; surveyLeft.current = true; setUnlocked(true); surveyActive.current = false;
+          setTimeout(() => document.getElementById('save-area')?.scrollIntoView({ behavior: 'smooth' }), 180);
         }
-      };
-      document.addEventListener('visibilitychange', onReturn);
-      window.location.assign(SURVEY_URL);
-      return;
-    }
-    surveyTimerRef.current = setInterval(() => {
-      if (popup.closed) {
-        if (surveyTimerRef.current) clearInterval(surveyTimerRef.current);
-        surveyTimerRef.current = null;
-        setUnlocked(true);
-        sessionStorage.setItem('shiji-base-tone-unlocked', 'true');
-        setTimeout(() => document.getElementById('save')?.scrollIntoView({ behavior: 'smooth' }), 160);
-      }
-    }, 800);
-  }
-
-  function renderSavePanel() {
-    return (
-      <div className="save-panel" id="save">
-        <h2>谢谢你花时间告诉我这些</h2>
-        <p>你的回答已经收到。</p>
-        <p>认识自己，不是找到一个固定答案，而是逐渐看见自己如何运转，也看见自己仍然拥有怎样的选择。</p>
-        <div className="map-bridge"><h3>从底色，到完整地图</h3><p>如果你还想进一步理解：这种运行方式怎样形成、不同维度如何互相影响，以及你当前处在什么阶段——《识己 · 自我认知八维地图》会在完整资料和现实校准的基础上，展开八个自我认知维度、原局核心解析与行动启示。</p></div>
-        <button className="primary-button" type="button" onClick={saveImage} disabled={saving}>{saving ? '正在制作图片……' : '保存为图片'}<span aria-hidden="true">↓</span></button>
-        {saveMessage && <p className="save-message" role="status">{saveMessage}</p>}
-      </div>
-    );
-  }
-
-  function renderActions() {
-    if (SURVEY_GATING === 'off') return renderSavePanel();
-    if (SURVEY_GATING === 'soft') {
-      return (
-        <>
-          {renderSavePanel()}
-          <a className="survey-soft-link" href={SURVEY_URL} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: '14px', color: '#5f7264', fontSize: '14px', textDecoration: 'underline' }}>欢迎花 1 分钟告诉我们你的真实需求 ↗</a>
-        </>
-      );
-    }
-    if (!unlocked) {
-      return <button className="primary-button" type="button" onClick={openSurvey}>需求调研，解锁保存 ↗</button>;
-    }
-    return renderSavePanel();
+      }, 800);
+    } else window.location.assign(SURVEY_URL);
   }
 
   async function saveImage() {
     if (!exportRef.current || !report) return;
-    setSaving(true);
-    setSaveMessage('');
+    setSaving(true); setMessage('');
     try {
       await document.fonts.ready;
-      const dataUrl = await toPng(exportRef.current, { pixelRatio: 2, cacheBust: true, backgroundColor: '#f6f1e7' });
-      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-      if (isMobile) {
-        setSavedImage(dataUrl);
-      } else {
-        const link = document.createElement('a');
-        link.download = `识己·底色-${report.dayPillar}.png`;
-        link.href = dataUrl;
-        link.click();
-        setSaveMessage('图片已保存。你可以把它留给自己，也可以分享给想一起认识自己的人。');
-      }
-    } catch {
-      setSaveMessage('图片暂时没有保存成功，请稍后再试。');
-    } finally {
-      setSaving(false);
-    }
+      const dataUrl = await toPng(exportRef.current, { pixelRatio: 2, cacheBust: true, backgroundColor: '#f4ead8' });
+      if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) setSavedImage(dataUrl);
+      else { const link = document.createElement('a'); link.download = `识己·神话原型-${report.archetype}.png`; link.href = dataUrl; link.click(); }
+      setHasSaved(true); setMessage('图片已经准备好。你可以把它留给自己，也可以邀请朋友一起来看看。');
+    } catch { setMessage('图片暂时没有制作成功，请再试一次。'); }
+    finally { setSaving(false); }
+  }
+
+  async function shareProduct() {
+    if (!report) return;
+    const text = `我是${report.combinedTitle}。你的生命故事里，住着哪位神话人物？`;
+    const url = `${window.location.origin}${window.location.pathname}`;
+    try {
+      if (navigator.share) await navigator.share({ title: '识己 · 神话原型', text, url });
+      else { await navigator.clipboard.writeText(`${text}\n${url}`); setMessage('链接已复制，可以发给朋友了。'); }
+    } catch (error) { if ((error as DOMException)?.name !== 'AbortError') setMessage('暂时无法打开分享，请复制当前网址发送给朋友。'); }
+  }
+
+  function renderGate() {
+    if (!report) return null;
+    const saveButton = <button className="primary-button" type="button" onClick={saveImage} disabled={saving}>{saving ? '正在制作图片……' : '保存为图片'}<span>↓</span></button>;
+    if (SURVEY_GATING === 'off') return saveButton;
+    if (SURVEY_GATING === 'soft') return <>{saveButton}<a className="soft-survey" href={SURVEY_URL} target="_blank" rel="noreferrer">如果你愿意，花几分钟告诉我你真正想从自我探索中获得什么 →</a></>;
+    if (unlocked) return saveButton;
+    return <button className="primary-button" type="button" onClick={() => setSurveyPrompt(true)}>完成简短调研，解锁保存<span>↗</span></button>;
   }
 
   return (
-    <main id="top">
-      <header className="brandbar"><span className="brand-seal">识</span><span>刘迷糊丨自我探索</span></header>
-
-      <section className="form-section" id="start">
-        <div className="product-heading"><h1>识己 · 底色</h1><p>认识自己，从看见开始。</p></div>
-        <form className="generator-form" onSubmit={makeReport}>
-          <fieldset className="form-block">
-            <legend><span>01</span><strong>出生信息</strong></legend>
-            <p className="block-intro">请选择公历（新历）出生信息。</p>
-            <div className="date-grid">
-              <label><span>出生年份（新历）</span><select value={form.year} onChange={event => update('year', event.target.value)}><option value="">请选择</option>{years.map(year => <option value={year} key={year}>{year} 年</option>)}</select></label>
-              <label><span>出生月份</span><select value={form.month} onChange={event => { update('month', event.target.value); update('day', ''); }}><option value="">请选择</option>{Array.from({ length: 12 }, (_, index) => index + 1).map(month => <option value={month} key={month}>{month} 月</option>)}</select></label>
-              <label><span>出生日期</span><select value={form.day} onChange={event => update('day', event.target.value)}><option value="">请选择</option>{days.map(day => <option value={day} key={day}>{day} 日</option>)}</select></label>
-              <label><span>出生时辰（真太阳时）</span><select value={form.hour} onChange={event => update('hour', event.target.value as HourOption)}><option value="">请选择</option>{HOURS.map(hour => <option value={hour.value} key={hour.value}>{hour.label}</option>)}</select></label>
-            </div>
-          </fieldset>
-
-          <fieldset className="form-block">
-            <legend><span>02</span><strong>你现在最想了解什么？</strong></legend>
-            <ChoiceGroup name="focus" value={form.focus} options={FOCUS_OPTIONS} onChange={value => update('focus', value as FormData['focus'])} />
-          </fieldset>
-
-          <fieldset className="form-block">
-            <legend><span>03</span><strong>最近一次状态比较在线时，哪些条件更接近？</strong></legend>
-            <p className="block-intro">可选择1—2项。</p>
-            <MultiChoiceGroup<Effective> name="effective" values={form.effective} options={EFFECTIVE_OPTIONS} onChange={values => update('effective', values)} />
-          </fieldset>
-
-          <fieldset className="form-block">
-            <legend><span>04</span><strong>当你开始消耗时，哪些信号通常最先出现？</strong></legend>
-            <p className="block-intro">可选择1—2项。选择最早出现的信号，而不是最严重的表现。</p>
-            <MultiChoiceGroup<Overload> name="overload" values={form.overload} options={OVERLOAD_OPTIONS} onChange={values => update('overload', values)} />
-          </fieldset>
-
-          {error && <p className="form-error" role="alert">{error}</p>}
-          <button className="primary-button" type="submit" disabled={making}>{making ? '正在制作你的识己 · 底色……' : '制作我的底色'}<span aria-hidden="true">→</span></button>
-        </form>
-      </section>
-
-      {report && (
-        <section className="report-section" id="report">
-          <article className={`result-card day-tone-${report.dayElement} polarity-${report.dayPolarity} season-${report.season}`}><ReportContent report={report} /></article>
-          <div className="report-actions">
-            {renderActions()}
-          </div>
+    <main className={`app stage-${stage}`}>
+      {stage === 'landing' && (
+        <section className="landing-screen">
+          <div className="landing-art"><img src="myth-archetypes-v1.png" alt="六位神话人物" /></div>
+          <div className="landing-overlay" />
+          <div className="landing-content"><Brand /><p className="product-name">识己 · 神话原型</p><h1>你的生命故事里，<br />住着哪位神话人物？</h1><p className="landing-copy">看见与你最接近的神话原型，以及这股力量落在怎样的生命底色里。</p><button className="primary-button light" onClick={startFresh}>看见我的神话<span>→</span></button><p className="privacy-line">约3分钟 · 20题 · 完全隐私</p>{pendingAvailable && <button className="resume-button" onClick={continuePending}>继续刚才的报告</button>}</div>
         </section>
       )}
 
-      <footer className="site-footer">刘迷糊丨自我探索</footer>
-
-      {report && <div className="export-stage"><section ref={exportRef}><ExportCard report={report} qrCode={qrCode} /></section></div>}
-
-      {savedImage && (
-        <div className="image-modal" role="dialog" aria-modal="true" aria-label="保存识己底色图片">
-          <div className="image-modal-card"><button type="button" onClick={() => setSavedImage('')} aria-label="关闭">×</button><h2>长按图片，保存到相册</h2><img src={savedImage} alt="识己底色长图" /></div>
-        </div>
+      {stage === 'intro' && (
+        <section className="flow-screen intro-screen"><Brand /><div className="mystery-orbit" aria-hidden="true"><i /><i /><i /><i /><i /><i /></div><div className="screen-copy"><p className="eyebrow">开始之前</p><h1>从第一反应开始</h1><p>这里没有正确答案。请选择更接近日常里的你，而不是你觉得自己应该成为的样子。</p><button className="primary-button" onClick={() => setStage('questions')}>开始<span>→</span></button></div></section>
       )}
+
+      {stage === 'questions' && currentQuestion && (
+        <section className="flow-screen question-screen"><Brand /><div className="question-progress"><div><i style={{ width: `${((questionIndex + 1) / 18) * 100}%` }} /></div><span>{questionIndex + 1} / 18</span></div><div className="question-card"><h1>{currentQuestion.text}</h1><div className="answer-list">{ANSWER_KEYS.map(key => <button className={answers[questionIndex] === key ? 'is-selected' : ''} key={key} onClick={() => chooseAnswer(key)}><span>{currentQuestion.options[key]}</span><i /></button>)}</div><button className="back-link" disabled={questionIndex === 0} onClick={() => setQuestionIndex(index => Math.max(0, index - 1))}>← 上一题</button></div></section>
+      )}
+
+      {stage === 'birth' && (
+        <section className="flow-screen form-screen"><Brand /><div className="screen-copy wide"><p className="eyebrow">你的神话原型已经渐渐清晰</p><h1>让它落进你的生命底色</h1><p className="cosmic-copy">隔着宇宙星辰，也许会有一种力量与你共振。</p><div className="form-card"><h2>出生时空</h2><div className="date-grid"><label><span>出生年份｜公历（新历）</span><select value={birth.year} onChange={event => setBirth(previous => ({ ...previous, year: event.target.value }))}><option value="">请选择</option>{years.map(year => <option value={year} key={year}>{year} 年</option>)}</select></label><label><span>出生月份</span><select value={birth.month} onChange={event => setBirth(previous => ({ ...previous, month: event.target.value, day: '' }))}><option value="">请选择</option>{Array.from({ length: 12 }, (_, index) => index + 1).map(month => <option value={month} key={month}>{month} 月</option>)}</select></label><label><span>出生日期</span><select value={birth.day} onChange={event => setBirth(previous => ({ ...previous, day: event.target.value }))}><option value="">请选择</option>{days.map(day => <option value={day} key={day}>{day} 日</option>)}</select></label><label><span>出生时辰｜选填</span><select value={birth.hour} onChange={event => setBirth(previous => ({ ...previous, hour: event.target.value as HourOption }))}><option value="">不确定可以跳过</option>{HOURS.map(item => <option value={item.value} key={item.value}>{item.label}</option>)}</select></label></div><p className="field-note">用来绘制这股力量的流动方式，不改变你的神话原型。</p></div>{error && <p className="error" role="alert">{error}</p>}<button className="primary-button" onClick={continueBirth}>继续制作<span>→</span></button></div></section>
+      )}
+
+      {stage === 'focus' && (
+        <section className="flow-screen focus-screen"><Brand /><div className="screen-copy wide"><p className="eyebrow">最后一题</p><h1>这一次，你最想先看见什么？</h1><p>选择一个此刻最关心的方向。</p><div className="focus-list">{FOCUS_OPTIONS.map(option => <button className={focus === option.value ? 'is-selected' : ''} key={option.value} onClick={() => { setFocus(option.value); setError(''); }}><strong>{option.title}</strong><span>{option.detail}</span><i /></button>)}</div>{error && <p className="error" role="alert">{error}</p>}<button className="primary-button" onClick={makeReport}>制作我的结果<span>→</span></button></div></section>
+      )}
+
+      {stage === 'making' && (
+        <section className="making-screen"><div className="making-visual"><div className="making-core" /><i /><i /><i /><i /></div><div className="making-copy"><p className={makingStep >= 0 ? 'active' : ''}>正在整理你的选择轮廓</p><p className={makingStep >= 1 ? 'active' : ''}>正在看见你的神话原型</p><p className={makingStep >= 2 ? 'active' : ''}>你的生命底色正在绽放</p><strong className={makingStep >= 3 ? 'active' : ''}>看见了。</strong></div></section>
+      )}
+
+      {stage === 'reveal' && report && (
+        <section className={`reveal-screen tone-${report.dayElement} season-${report.season}`}><Brand /><div className="reveal-visual"><MythPortrait index={report.archetypeIndex} /><ForceField report={report} compact /></div><div className="reveal-copy"><p className="eyebrow">在你的选择里，与你最接近的是</p><h1>{report.combinedTitle}</h1><h2>{report.archetypeTitle}</h2><p>{report.archetypeLine}</p><button className="primary-button light" onClick={() => { setStage('report'); setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 30); }}>看看它怎样在我身上运行<span>↓</span></button></div></section>
+      )}
+
+      {stage === 'report' && report && (
+        <section className={`report-page tone-${report.dayElement} season-${report.season}`}><header className="report-cover"><Brand /><div className="report-hero"><MythPortrait index={report.archetypeIndex} /><div><p className="eyebrow">我的神话原型</p><h1>{report.combinedTitle}</h1><h2>{report.archetypeTitle}</h2><p>{report.archetypeLine}</p></div></div><ForceField report={report} /></header><div className="report-content"><ReportSections report={report} /><section className="map-bridge"><p className="section-index">继续探索</p><h2>从一个原型，到完整的自己</h2><p>如果你还想进一步理解：这些倾向怎样形成、不同维度如何互相影响，以及你当前正在面对什么——《识己 · 自我认知八维地图》会在完整资料和现实校准的基础上，展开八个自我认知维度、原局核心解析与行动启示。</p></section><section className="save-area" id="save-area">{renderGate()}{hasSaved && <button className="secondary-button" onClick={shareProduct}>邀请朋友也来看看<span>↗</span></button>}{message && <p className="status-message" role="status">{message}</p>}</section></div></section>
+      )}
+
+      {surveyPrompt && <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="survey-title"><div className="survey-modal"><button className="modal-close" onClick={() => setSurveyPrompt(false)} aria-label="关闭">×</button><p className="eyebrow">保存之前</p><h2 id="survey-title">完成后，记得回来</h2><p>问卷将在新页面打开。提交后，请返回这里保存你的《识己 · 神话原型》。</p><p className="modal-note">本次结果已经为你临时保留。</p><button className="primary-button" onClick={goToSurvey}>去填写调研<span>↗</span></button><button className="text-button" onClick={() => setSurveyPrompt(false)}>暂时不填</button></div></div>}
+
+      {savedImage && <div className="image-modal"><div><button onClick={() => setSavedImage('')} aria-label="关闭">×</button><p>长按图片保存到相册</p><img src={savedImage} alt="识己神话原型长图" /></div></div>}
+
+      {report && <div className="export-stage" aria-hidden="true"><div ref={exportRef}><ExportCard report={report} productQr={productQr} /></div></div>}
     </main>
   );
 }
