@@ -66,6 +66,30 @@ async function spriteCellToDataUrl(path: string, index: number, outSize = 480): 
   return canvas.toDataURL('image/png');
 }
 
+// 给任意 Promise 套一层超时：超时即 reject，确保 toPng 这类「既不 resolve 也不 reject」的
+// 挂起（超大 SVG data URL 在手机/webview 中 onload/onerror 都不触发）不会让「正在制作图片」永远灰着。
+function withTimeout<T>(promise: Promise<T>, ms: number, label = '操作'): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(`${label}超时 ${ms}ms`)), ms);
+    promise.then(
+      value => { window.clearTimeout(timer); resolve(value); },
+      error => { window.clearTimeout(timer); reject(error); },
+    );
+  });
+}
+
+// 等一张 <img> 绘制完成；已完成直接返回，未完成最多等 timeoutMs（超时也继续，绝不卡死）。
+function imgReady(image: HTMLImageElement, timeoutMs = 8000): Promise<void> {
+  if (image.complete && image.naturalWidth > 0) return Promise.resolve();
+  return new Promise<void>(resolve => {
+    const timer = window.setTimeout(() => resolve(), timeoutMs);
+    const done = () => { window.clearTimeout(timer); resolve(); };
+    image.addEventListener('load', done, { once: true });
+    image.addEventListener('error', done, { once: true });
+    if (image.complete && image.naturalWidth === 0) { try { image.src = image.src; } catch { /* 忽略 */ } }
+  });
+}
+
 // 跨端复制文本：execCommand 在微信/webview 中最可靠；安全上下文下再尝试异步剪贴板。
 function copyText(text: string): boolean {
   try {
@@ -120,7 +144,12 @@ function Brand() {
   return <div className="brand"><span className="brand-mark">识</span><span>刘迷糊丨自我探索</span></div>;
 }
 
-function MythPortrait({ index, className = '', dataUrl = '' }: { index: number; className?: string; dataUrl?: string }) {
+function MythPortrait({ index, className = '', dataUrl = '', exportMode = false }: { index: number; className?: string; dataUrl?: string; exportMode?: boolean }) {
+  // 导出卡：始终渲染 <img>（绝不用 CSS 背景）。截图前 saveImage 会用裁好的小图 data URL 覆盖 src，
+  // 这样 html-to-image 永远不会把整张 3.97MB 精灵图内联进 SVG，避免手机端卡死或整张空白。
+  if (exportMode) {
+    return <img className={`myth-portrait portrait-img ${className}`} src={dataUrl || '/myth-archetypes-v1.png?v=5'} alt="神话原型人物视觉" draggable={false} />;
+  }
   if (dataUrl) return <img className={`myth-portrait portrait-img ${className}`} src={dataUrl} alt="神话原型人物视觉" draggable={false} />;
   return <div className={`myth-portrait portrait-${index} ${className}`} style={{ backgroundImage: 'url("myth-archetypes-v1.png?v=5")' }} role="img" aria-label="神话原型人物视觉" />;
 }
@@ -218,7 +247,7 @@ function ExportCard({ report, productQr, wechatQrDataUrl = '', portraitDataUrl =
         <SceneAtmosphere />
         <Brand />
         <p className="eyebrow">我的神话原型</p>
-        <MythPortrait index={report.archetypeIndex} dataUrl={portraitDataUrl} />
+        <MythPortrait index={report.archetypeIndex} dataUrl={portraitDataUrl} exportMode />
         <h1 className="result-title">{report.combinedTitle}</h1>
         <p className="archetype-role">{report.archetypeTitle}</p>
         <p className="archetype-line">{report.archetypeLine}</p>
@@ -395,29 +424,34 @@ export default function Home() {
     setSaving(true); setMessage('');
     try {
       await document.fonts.ready;
-      // 导出卡里的原型图/微信码均为带 data URL 的 <img>（来自 props，已内联），
-      // 这里只需等它们绘制完成再截图。data URL 内联使桌面与手机端走同一条路径。
+      // 本地重新裁出小图 data URL（不依赖 React state 的时机，避免 state 为空时导出卡退回整张精灵图背景）。
+      // 任一步失败都用已有 state 兜底，绝不让截图流程卡死。
+      let portraitUrl = mythPortraitDataUrl;
+      let wechatUrl = wechatQrDataUrl;
+      try { portraitUrl = await withTimeout(spriteCellToDataUrl('/myth-archetypes-v1.png?v=5', report.archetypeIndex, 480), 6000, '裁原型图'); } catch { /* 用已有值兜底 */ }
+      try { if (!wechatUrl) wechatUrl = await withTimeout(assetToDataUrl('/wechat-qr.png', 400), 6000, '裁微信码'); } catch { /* 用已有值兜底 */ }
+      // 用裁好的小图覆盖导出卡里的 <img>，确保截图时绝不会出现整张 3.97MB 精灵图。
+      const portraitImg = exportRef.current.querySelector('img.myth-portrait') as HTMLImageElement | null;
+      if (portraitImg && portraitUrl) portraitImg.src = portraitUrl;
+      const wechatImg = exportRef.current.querySelector('.wechat-qr-crop img') as HTMLImageElement | null;
+      if (wechatImg && wechatUrl) wechatImg.src = wechatUrl;
+      // 等所有内联图绘制完成（最长 8s/张，超时也继续，不卡死）。
       const embeddedImages = Array.from(exportRef.current.querySelectorAll('img'));
-      await Promise.all(embeddedImages.map(async image => {
-        if (image.complete && image.naturalWidth > 0) return;
-        await new Promise<void>(resolve => {
-          const timer = window.setTimeout(() => resolve(), 8000);
-          const done = () => { window.clearTimeout(timer); resolve(); };
-          image.addEventListener('load', done, { once: true });
-          image.addEventListener('error', done, { once: true });
-          if (image.complete && image.naturalWidth === 0) image.src = image.src;
-        });
-      }));
-      // 等两帧，确保刚内联的 data URL 图片已绘制（手机端尤其必要）。
+      await Promise.all(embeddedImages.map(image => imgReady(image, 8000)));
+      // 等两帧，确保刚覆盖的 data URL 图片已绘制（手机端尤其必要）。
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve)));
-      // pixelRatio=1，配合放大的导出字号，在手机宽度缩放后仍清晰。
-      const dataUrl = await toPng(exportRef.current, { pixelRatio: 1, cacheBust: false, backgroundColor: '#e8eeef' });
+      // skipFonts:true 跳过 web 字体抓取（避免字体文件在微信/webview 加载慢导致 toPng 永久挂起）；
+      // 外层 withTimeout 作最后兜底：toPng 超时即报错提示，而非「正在制作图片」一直灰着没下文。
+      const dataUrl = await withTimeout(
+        toPng(exportRef.current, { pixelRatio: 1, cacheBust: false, backgroundColor: '#e8eeef', skipFonts: true }),
+        20000, '生成图片'
+      );
       if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) setSavedImage(dataUrl);
       else { const link = document.createElement('a'); link.download = `识己·神话原型-${report.archetype}.png`; link.href = dataUrl; link.click(); }
       setHasSaved(true); setMessage('图片已经准备好。你可以把它留给自己，也可以邀请朋友一起来看看。');
     } catch (saveError) {
       console.error('Unable to create result image:', saveError);
-      setMessage('图片暂时没有制作成功，请再试一次。');
+      setMessage('图片暂时没有制作成功，请稍后重试，或换手机浏览器打开再保存。');
     }
     finally { setSaving(false); }
   }
