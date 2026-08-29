@@ -153,8 +153,10 @@ function MythPortrait({ index, className = '', dataUrl = '', exportMode = false 
   if (exportMode) {
     // 关键：dataUrl 为空时绝不回退整张 3.97MB 精灵图 URL——那会让 html-to-image 内联整图、
     // 在手机/微信 webview 里因 SVG foreignObject 尺寸超限而永久挂起（「正在制作图片」一直灰）。
-    // 空 src 至多让导出图缺原型图，但绝不卡死；正常情况 report 阶段已预裁好小图 data URL。
-    return <img className={`myth-portrait portrait-img ${className}`} src={dataUrl || undefined} alt="神话原型人物视觉" draggable={false} />;
+    // 但也不能留空 src：html-to-image 会把空 src 当成相对路径去加载当前页，导致 toPng 挂起。
+    // 所以用 1x1 透明 GIF 占位：最坏只是导出图缺原型图，绝不卡死；正常情况 report 阶段已预裁好小图。
+    const FALLBACK = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+    return <img className={`myth-portrait portrait-img ${className}`} src={dataUrl || FALLBACK} alt="神话原型人物视觉" draggable={false} />;
   }
   if (dataUrl) return <img className={`myth-portrait portrait-img ${className}`} src={dataUrl} alt="神话原型人物视觉" draggable={false} />;
   return <div className={`myth-portrait portrait-${index} ${className}`} style={{ backgroundImage: 'url("myth-archetypes-v1.png?v=5")' }} role="img" aria-label="神话原型人物视觉" />;
