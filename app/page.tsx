@@ -405,8 +405,13 @@ export default function Home() {
       // 任一步失败都用已有 state 兜底，绝不让截图流程卡死。
       let portraitUrl = mythPortraitDataUrl;
       let wechatUrl = wechatQrDataUrl;
-      try { portraitUrl = await withTimeout(assetToDataUrl(`portraits/${report.archetypeIndex}.jpg`, 512, 'image/jpeg', 0.9), 6000, '裁原型图'); } catch { /* 用已有值兜底 */ }
-      try { if (!wechatUrl) wechatUrl = await withTimeout(assetToDataUrl('/wechat-qr-400.png', 400), 6000, '裁微信码'); } catch { /* 用已有值兜底 */ }
+      // 优先用 useEffect 已预裁好的图；只有 state 还没好时再生，避免重复覆盖导致 WebKit 重新解码赶不及。
+      if (!portraitUrl) {
+        try { portraitUrl = await withTimeout(assetToDataUrl(`portraits/${report.archetypeIndex}.jpg`, 400, 'image/jpeg', 0.9), 6000, '裁原型图'); } catch { /* 用已有值兜底 */ }
+      }
+      if (!wechatUrl) {
+        try { wechatUrl = await withTimeout(assetToDataUrl('/wechat-qr-400.png', 400), 6000, '裁微信码'); } catch { /* 用已有值兜底 */ }
+      }
       // 用裁好的小图覆盖导出卡里的 <img>，确保截图时绝不会出现整张 3.97MB 精灵图。
       const exportPortrait = exportRef.current.querySelector('.export-portrait') as HTMLDivElement | null;
       if (exportPortrait && portraitUrl) exportPortrait.style.backgroundImage = `url(${portraitUrl})`;
@@ -427,9 +432,8 @@ export default function Home() {
           new Promise<void>(resolve => setTimeout(resolve, 3000)),
         ]);
       }
-      // 等一小段时间让刚覆盖的 data URL 图片绘制完成。用 setTimeout 而非 requestAnimationFrame：
-      // rAF 在部分无头/后台环境会被节流、永不回调，会导致「正在制作图片」永久灰着没下文。
-      await new Promise<void>(resolve => setTimeout(resolve, 200));
+      // 给 WebKit 额外留出解码/绘制时间。实测 500ms 可稳定渲染 background-image，800ms 更稳。
+      await new Promise<void>(resolve => setTimeout(resolve, 800));
       // skipFonts:true 跳过 web 字体抓取（避免字体文件在微信/webview 加载慢导致 toPng 永久挂起）；
       // 外层 withTimeout 作最后兜底：toPng 超时即报错提示，而非「正在制作图片」一直灰着没下文。
       const dataUrl = await withTimeout(
