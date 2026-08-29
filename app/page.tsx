@@ -423,7 +423,8 @@ export default function Home() {
     if (!exportRef.current || !report) return;
     setSaving(true); setMessage('');
     try {
-      await document.fonts.ready;
+      // 字体就绪（最多等 5s，避免个别 webview 里 document.fonts.ready 不触发导致永久挂起）。
+      await withTimeout(document.fonts.ready, 5000, '字体就绪');
       // 本地重新裁出小图 data URL（不依赖 React state 的时机，避免 state 为空时导出卡退回整张精灵图背景）。
       // 任一步失败都用已有 state 兜底，绝不让截图流程卡死。
       let portraitUrl = mythPortraitDataUrl;
@@ -438,8 +439,9 @@ export default function Home() {
       // 等所有内联图绘制完成（最长 8s/张，超时也继续，不卡死）。
       const embeddedImages = Array.from(exportRef.current.querySelectorAll('img'));
       await Promise.all(embeddedImages.map(image => imgReady(image, 8000)));
-      // 等两帧，确保刚覆盖的 data URL 图片已绘制（手机端尤其必要）。
-      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve)));
+      // 等一小段时间让刚覆盖的 data URL 图片绘制完成。用 setTimeout 而非 requestAnimationFrame：
+      // rAF 在部分无头/后台环境会被节流、永不回调，会导致「正在制作图片」永久灰着没下文。
+      await new Promise<void>(resolve => setTimeout(resolve, 200));
       // skipFonts:true 跳过 web 字体抓取（避免字体文件在微信/webview 加载慢导致 toPng 永久挂起）；
       // 外层 withTimeout 作最后兜底：toPng 超时即报错提示，而非「正在制作图片」一直灰着没下文。
       const dataUrl = await withTimeout(
