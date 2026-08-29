@@ -38,9 +38,12 @@ async function assetToDataUrl(path: string, maxSize = 1024): Promise<string> {
 // 从精灵图裁出「当前原型」那一格，缩放为正方形 data URL。
 // 依据导出卡里 .myth-portrait 的样式（background-size:300% auto；portrait-0..5 的 position）
 // 反向推算源图坐标，得到与页面展示完全一致的一格；输出很小，html-to-image 嵌入最稳。
-async function spriteCellToDataUrl(path: string, index: number, outSize = 480): Promise<string> {
+async function spriteCellToDataUrl(path: string, index: number, outSize = 480, preloadedImg?: HTMLImageElement): Promise<string> {
   const absolute = new URL(path, window.location.href).href;
-  const img = await loadImage(absolute);
+  // 优先用「挂载时已预加载」的精灵图（内存中），避免保存/报告阶段再走网络加载 3.97MB 整图。
+  const img = (preloadedImg && preloadedImg.complete && preloadedImg.naturalWidth > 0)
+    ? preloadedImg
+    : await loadImage(absolute);
   const W = img.naturalWidth, H = img.naturalHeight;
   const cols = 3;
   const BOX = 540; // 导出卡 .myth-portrait 的显示边长
@@ -148,7 +151,10 @@ function MythPortrait({ index, className = '', dataUrl = '', exportMode = false 
   // 导出卡：始终渲染 <img>（绝不用 CSS 背景）。截图前 saveImage 会用裁好的小图 data URL 覆盖 src，
   // 这样 html-to-image 永远不会把整张 3.97MB 精灵图内联进 SVG，避免手机端卡死或整张空白。
   if (exportMode) {
-    return <img className={`myth-portrait portrait-img ${className}`} src={dataUrl || '/myth-archetypes-v1.png?v=5'} alt="神话原型人物视觉" draggable={false} />;
+    // 关键：dataUrl 为空时绝不回退整张 3.97MB 精灵图 URL——那会让 html-to-image 内联整图、
+    // 在手机/微信 webview 里因 SVG foreignObject 尺寸超限而永久挂起（「正在制作图片」一直灰）。
+    // 空 src 至多让导出图缺原型图，但绝不卡死；正常情况 report 阶段已预裁好小图 data URL。
+    return <img className={`myth-portrait portrait-img ${className}`} src={dataUrl || undefined} alt="神话原型人物视觉" draggable={false} />;
   }
   if (dataUrl) return <img className={`myth-portrait portrait-img ${className}`} src={dataUrl} alt="神话原型人物视觉" draggable={false} />;
   return <div className={`myth-portrait portrait-${index} ${className}`} style={{ backgroundImage: 'url("myth-archetypes-v1.png?v=5")' }} role="img" aria-label="神话原型人物视觉" />;
@@ -285,6 +291,13 @@ export default function Home() {
   const [productQr, setProductQr] = useState('');
   const [wechatQrDataUrl, setWechatQrDataUrl] = useState('');
   const [mythPortraitDataUrl, setMythPortraitDataUrl] = useState('');
+  // 预加载精灵图：组件挂载即开始下载，用户填问卷期间通常已就绪；报告/保存阶段裁剪直接用内存中的图，不触发实时网络请求。
+  const spriteImgRef = useRef<HTMLImageElement | null>(null);
+  useEffect(() => {
+    const img = new Image();
+    img.src = '/myth-archetypes-v1.png?v=5';
+    spriteImgRef.current = img;
+  }, []);
   const exportRef = useRef<HTMLDivElement>(null);
   const surveyActive = useRef(false);
   const surveyLeft = useRef(false);
@@ -332,10 +345,14 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    // 原型图：等报告生成后，按当前原型索引从精灵图裁出那一格并内联（小图，手机端最稳）。
+    // 原型图：报告生成后，优先用「挂载时已预加载」的精灵图裁出当前原型那一格并内联（小图，手机端最稳）。
+    // 预加载图已在用户填问卷期间下载完，不再依赖保存时实时网络；若尚未就绪才回退实时加载。
     if (!report) return;
-    spriteCellToDataUrl('/myth-archetypes-v1.png?v=5', report.archetypeIndex, 480)
-      .then(setMythPortraitDataUrl).catch(() => {});
+    const pre = spriteImgRef.current;
+    const cutter = (pre && pre.complete && pre.naturalWidth > 0)
+      ? spriteCellToDataUrl('/myth-archetypes-v1.png?v=5', report.archetypeIndex, 480, pre)
+      : spriteCellToDataUrl('/myth-archetypes-v1.png?v=5', report.archetypeIndex, 480);
+    cutter.then(setMythPortraitDataUrl).catch(() => {});
   }, [report?.archetypeIndex]);
 
   useEffect(() => {
