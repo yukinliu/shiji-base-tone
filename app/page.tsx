@@ -304,13 +304,33 @@ export default function Home() {
           if (image.complete && image.naturalWidth === 0) image.src = image.src;
         });
       }));
-      const portraitAsset = new Image();
-      portraitAsset.src = new URL('myth-archetypes-v1.png?v=5', document.baseURI).href;
-      await portraitAsset.decode();
-      // Keep the long image below mobile canvas limits while retaining a 1530px-wide result.
-      const dataUrl = await toPng(exportRef.current, { pixelRatio: 1.7, cacheBust: false, backgroundColor: '#e8eeef' });
-      if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) setSavedImage(dataUrl);
-      else { const link = document.createElement('a'); link.download = `识己·神话原型-${report.archetype}.png`; link.href = dataUrl; link.click(); }
+      // 将神话原型图内联为 data URL，确保 html-to-image 能把它嵌入导出图。
+      // 离屏容器里的 CSS 背景图（尤其是精灵图切片）常常抓不到，导致保存后原型图空白。
+      let portraitNodes: HTMLElement[] = [];
+      let previousBackgrounds: string[] = [];
+      try {
+        const portraitResp = await fetch('myth-archetypes-v1.png?v=5');
+        const portraitBlob = await portraitResp.blob();
+        const portraitDataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error('神话原型图读取失败'));
+          reader.readAsDataURL(portraitBlob);
+        });
+        portraitNodes = Array.from(exportRef.current.querySelectorAll<HTMLElement>('.myth-portrait'));
+        previousBackgrounds = portraitNodes.map(node => node.style.backgroundImage);
+        portraitNodes.forEach(node => { node.style.backgroundImage = `url("${portraitDataUrl}")`; });
+      } catch (inlineError) {
+        console.warn('神话原型图内联失败，将按原背景图导出：', inlineError);
+      }
+      try {
+        // 降低 pixelRatio，让长图更贴近手机宽度，放大后的导出字号在按宽度缩放后仍清晰可读。
+        const dataUrl = await toPng(exportRef.current, { pixelRatio: 1, cacheBust: false, backgroundColor: '#e8eeef' });
+        if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) setSavedImage(dataUrl);
+        else { const link = document.createElement('a'); link.download = `识己·神话原型-${report.archetype}.png`; link.href = dataUrl; link.click(); }
+      } finally {
+        portraitNodes.forEach((node, index) => { node.style.backgroundImage = previousBackgrounds[index] || ''; });
+      }
       setHasSaved(true); setMessage('图片已经准备好。你可以把它留给自己，也可以邀请朋友一起来看看。');
     } catch (saveError) {
       console.error('Unable to create result image:', saveError);
@@ -321,12 +341,45 @@ export default function Home() {
 
   async function shareProduct() {
     if (!report) return;
-    const text = `我是${report.combinedTitle}。你的生命故事里，住着哪位神话人物？`;
-    const url = `${window.location.origin}${window.location.pathname}`;
+    const pageUrl = `${window.location.origin}${window.location.pathname}`;
+    const text = `我是${report.combinedTitle}。你的生命故事里，住着哪位神话人物？\n${pageUrl}`;
+    const copyViaExecCommand = () => {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        ta.style.top = '0';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus(); ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return ok;
+      } catch { return false; }
+    };
+    const isWeChat = /micromessenger/i.test(navigator.userAgent);
     try {
-      if (navigator.share) await navigator.share({ title: '识己 · 神话原型', text, url });
-      else { await navigator.clipboard.writeText(`${text}\n${url}`); setMessage('链接已复制，可以发给朋友了。'); }
-    } catch (error) { if ((error as DOMException)?.name !== 'AbortError') setMessage('暂时无法打开分享，请复制当前网址发送给朋友。'); }
+      if (navigator.share) {
+        try {
+          await navigator.share({ title: '识己 · 神话原型', text, url: pageUrl });
+          return;
+        } catch (shareError) {
+          if ((shareError as DOMException)?.name === 'AbortError') return;
+          // 其他错误（如微信内被拦截）继续走复制兜底
+        }
+      }
+      let copied = false;
+      if (navigator.clipboard && window.isSecureContext) {
+        copied = await navigator.clipboard.writeText(text).then(() => true).catch(() => false);
+      }
+      if (!copied) copied = copyViaExecCommand();
+      if (copied) setMessage(isWeChat ? '链接已复制，去微信粘贴给朋友吧 👌' : '链接已复制，可以发给朋友了。');
+      else setMessage('复制失败，请长按上方网址手动发送给朋友。');
+    } catch {
+      if (copyViaExecCommand()) setMessage(isWeChat ? '链接已复制，去微信粘贴给朋友吧 👌' : '链接已复制，可以发给朋友了。');
+      else setMessage('复制失败，请长按上方网址手动发送给朋友。');
+    }
   }
 
   function renderGate() {
