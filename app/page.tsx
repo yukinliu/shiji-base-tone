@@ -704,8 +704,8 @@ export default function Home() {
   async function shareProduct() {
     if (!report) return;
     const pageUrl = `${window.location.origin}${window.location.pathname}`;
-    const shareCardUrl = `${pageUrl}?share=v2`;
-    const text = `快来看看你最像的神话人物是谁～我是「${report.archetype}」${report.archetypeTitle}\n\n${pageUrl}`;
+    const shareCardUrl = `${pageUrl}?share=v3`;
+    const text = `快来看看你最像的神话人物是谁～我是「${report.archetype}」${report.archetypeTitle}\n\n${shareCardUrl}`;
     const isWeChat = /micromessenger/i.test(navigator.userAgent);
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     if (isWeChat) {

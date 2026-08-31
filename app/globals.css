@@ -1991,7 +1991,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .persistent-load-note {
   position:fixed;
   z-index:90;
-  top:max(10px,env(safe-area-inset-top));
+  top:max(82px,calc(env(safe-area-inset-top) + 72px));
   left:50%;
   width:max-content;
   max-width:calc(100vw - 28px);
