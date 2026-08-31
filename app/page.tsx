@@ -459,7 +459,8 @@ export default function Home() {
   const [surveyPrompt, setSurveyPrompt] = useState(false);
   const [pendingAvailable, setPendingAvailable] = useState(false);
   const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'preparing' | 'rendering' | 'failed'>('idle');
+  const [showLoadNote, setShowLoadNote] = useState(true);
   const [savedImage, setSavedImage] = useState('');
   const [hasSaved, setHasSaved] = useState(false);
   const [message, setMessage] = useState('');
@@ -562,14 +563,14 @@ export default function Home() {
   function startFresh() {
     sessionStorage.removeItem(DRAFT_KEY); localStorage.removeItem(PENDING_KEY);
     setStage('intro'); setAnswers([]); setQuestionIndex(0); setBirth(EMPTY_BIRTH); setFocus(''); setReport(null);
-    setUnlocked(SURVEY_GATING !== 'on'); setPendingAvailable(false); setError(''); setMessage(''); setHasSaved(false); setSavedImage('');
+    setUnlocked(SURVEY_GATING !== 'on'); setPendingAvailable(false); setError(''); setMessage(''); setHasSaved(false); setSavedImage(''); setSaveStatus('idle');
     window.scrollTo({ top: 0, behavior: 'auto' });
   }
 
   function returnToOpening() {
     sessionStorage.removeItem(DRAFT_KEY); localStorage.removeItem(PENDING_KEY);
     setStage('landing'); setAnswers([]); setQuestionIndex(0); setBirth(EMPTY_BIRTH); setFocus(''); setReport(null);
-    setUnlocked(SURVEY_GATING !== 'on'); setPendingAvailable(false); setError(''); setMessage(''); setHasSaved(false); setSavedImage('');
+    setUnlocked(SURVEY_GATING !== 'on'); setPendingAvailable(false); setError(''); setMessage(''); setHasSaved(false); setSavedImage(''); setSaveStatus('idle');
     window.scrollTo({ top: 0, behavior: 'auto' });
   }
 
@@ -640,7 +641,7 @@ export default function Home() {
 
   async function saveImage() {
     if (!exportRef.current || !report) return;
-    setSaving(true); setMessage('');
+    setSaveStatus('preparing'); setMessage('');
     try {
       // 字体就绪（最多等 5s，避免个别 webview 里 document.fonts.ready 不触发导致永久挂起）。
       try { if (document.fonts?.ready) await withTimeout(document.fonts.ready, 5000, '字体就绪'); } catch { /* 字体超时不阻断导出 */ }
@@ -654,19 +655,19 @@ export default function Home() {
         spring: '/imagery-transitions/spring-season-v2.png', summer: '/imagery-transitions/summer-passage-v1.png',
         autumn: '/imagery-transitions/autumn-maturity-v1.png', winter: '/imagery-transitions/winter-spark-v1.png',
       };
-      if (!heroUrl) try { heroUrl = await withTimeout(assetToDataUrl(hero.src, 900, 'image/jpeg', .84), 12000, '准备人物主视觉'); } catch { /* 使用页面资源兜底 */ }
-      if (!seasonUrl) try { seasonUrl = await withTimeout(assetToDataUrl(seasonPath[report.season], 900, 'image/jpeg', .84), 12000, '准备生命意象'); } catch { /* 使用页面资源兜底 */ }
+      if (!heroUrl) heroUrl = await withTimeout(assetToDataUrl(hero.src, 900, 'image/jpeg', .84), 12000, '准备人物主视觉');
+      if (!seasonUrl) seasonUrl = await withTimeout(assetToDataUrl(seasonPath[report.season], 900, 'image/jpeg', .84), 12000, '准备生命意象');
       if (!wechatUrl) {
-        try { wechatUrl = await withTimeout(assetToDataUrl('/wechat-qr-400.png', 400), 6000, '准备个人二维码'); } catch { /* 用已有值兜底 */ }
+        wechatUrl = await withTimeout(assetToDataUrl('/wechat-qr-400.png', 400), 6000, '准备个人二维码');
       }
       if (!productUrl) {
         const siteUrl = `${window.location.origin}${window.location.pathname}`;
         try { productUrl = await QRCode.toDataURL(siteUrl, { width: 260, margin: 2, color: { dark: '#17323c', light: '#eef3f2' } }); } catch { /* 保留空码兜底 */ }
       }
-      const heroSource = heroUrl || new URL(hero.src, window.location.href).href;
-      const imagerySource = seasonUrl || new URL(seasonPath[report.season], window.location.href).href;
-      const wechatSource = wechatUrl || new URL('/wechat-qr-400.png', window.location.href).href;
-      if (!productUrl) throw new Error('产品二维码尚未准备好');
+      if (!heroUrl || !seasonUrl || !wechatUrl || !productUrl) throw new Error('导出图片资源尚未准备完整');
+      const heroSource = heroUrl;
+      const imagerySource = seasonUrl;
+      const wechatSource = wechatUrl;
       const exportHero = exportRef.current.querySelector('.result-master-art') as HTMLImageElement | null;
       if (exportHero) exportHero.src = heroSource;
       const exportImagery = exportRef.current.querySelector('.imagery-transition-art') as HTMLImageElement | null;
@@ -678,8 +679,10 @@ export default function Home() {
       // 等所有内联图绘制完成（最长 8s/张，超时也继续，不卡死）。
       const embeddedImages = Array.from(exportRef.current.querySelectorAll('img'));
       await Promise.all(embeddedImages.map(image => imgReady(image, 8000)));
+      if (embeddedImages.some(image => !image.complete || image.naturalWidth === 0)) throw new Error('有图片尚未加载');
       // 给 WebKit 额外留出解码/绘制时间。实测 500ms 可稳定渲染 background-image，800ms 更稳。
       await new Promise<void>(resolve => setTimeout(resolve, 800));
+      setSaveStatus('rendering');
       // skipFonts:true 跳过 web 字体抓取（避免字体文件在微信/webview 加载慢导致 toPng 永久挂起）；
       // 外层 withTimeout 作最后兜底：toPng 超时即报错提示，而非「正在制作图片」一直灰着没下文。
       const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -696,9 +699,10 @@ export default function Home() {
       setHasSaved(true); setMessage('图片已经准备好。你可以把它留给自己，也可以邀请朋友一起来看看。');
     } catch (saveError) {
       console.error('Unable to create result image:', saveError);
-      setMessage('图片暂时没有制作成功，请稍后重试，或换手机浏览器打开再保存。');
+      setSaveStatus('failed');
+      setMessage('有图片尚未加载，请点击“重新制作图片”再试一次。');
     }
-    finally { setSaving(false); }
+    finally { setSaveStatus(status => status === 'failed' ? 'failed' : 'idle'); }
   }
 
   async function shareProduct() {
@@ -741,7 +745,9 @@ export default function Home() {
 
   function renderGate() {
     if (!report) return null;
-    const saveButton = <button className="primary-button" type="button" onClick={saveImage} disabled={saving}>{saving ? '正在制作图片……' : '保存为图片'}<span>↓</span></button>;
+    const saving = saveStatus === 'preparing' || saveStatus === 'rendering';
+    const saveLabel = saveStatus === 'preparing' ? '正在准备图片……' : saveStatus === 'rendering' ? '正在制作图片……' : saveStatus === 'failed' ? '重新制作图片' : '保存为图片';
+    const saveButton = <button className="primary-button" type="button" onClick={saveImage} disabled={saving}>{saveLabel}<span>↓</span></button>;
     if (SURVEY_GATING === 'off') return saveButton;
     if (SURVEY_GATING === 'soft') return <>{saveButton}<a className="soft-survey" href={SURVEY_URL} target="_blank" rel="noreferrer">如果你愿意，花几分钟告诉我你真正想从自我探索中获得什么 →</a></>;
     if (unlocked) return saveButton;
@@ -750,7 +756,7 @@ export default function Home() {
 
   return (
     <main className={`app stage-${stage}`}>
-      <p className="persistent-load-note">如遇加载较慢，请耐心等待或重新制作～</p>
+      {showLoadNote && <div className="persistent-load-note"><span>如遇加载较慢，请耐心等待或重新制作～</span><button type="button" onClick={() => setShowLoadNote(false)} aria-label="关闭加载提示">×</button></div>}
       {stage === 'landing' && (
         <section className="landing-screen cosmic-stage">
           <div className="landing-content"><Brand /><div className="landing-message"><p className="landing-product">识己 · 神话原型</p><h1>你的生命故事里，<br />住着哪位神话人物？</h1></div><div className="landing-cta"><button className="primary-button light" onClick={startFresh}>看见我的神话<span>→</span></button>{pendingAvailable && <button className="resume-button" onClick={continuePending}>继续刚才的报告</button>}</div></div>
@@ -778,7 +784,7 @@ export default function Home() {
       )}
 
       {(stage === 'reveal' || stage === 'report') && report && (
-        <section className={`report-page tone-${report.dayElement} season-${report.season} ${themeClass(report)}`}><ResultHero report={report} /><ImageryTransition report={report} /><div className="report-content" id="report-content"><ReportSections report={report} /><MapBridge /><section className="save-area" id="save-area"><div className="save-actions">{renderGate()}<button className="share-button" type="button" onClick={shareProduct}>分享给朋友<span>↗</span></button><button className="secondary-button" type="button" onClick={returnToOpening}>重新制作<span>↻</span></button></div>{message && <p className="status-message" role="status">{message}</p>}</section></div></section>
+        <section className={`report-page tone-${report.dayElement} season-${report.season} ${themeClass(report)}`}><ResultHero report={report} /><ImageryTransition report={report} /><div className="report-content" id="report-content"><ReportSections report={report} /><MapBridge /><section className="save-area" id="save-area"><div className="save-actions">{renderGate()}<button className="share-button" type="button" onClick={shareProduct}>分享给朋友<span>↗</span></button><button className="secondary-button" type="button" onClick={returnToOpening}>再测一次<span>↻</span></button></div>{message && <p className="status-message" role="status">{message}</p>}</section></div></section>
       )}
 
       {surveyPrompt && <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="survey-title"><div className="survey-modal"><button className="modal-close" onClick={() => setSurveyPrompt(false)} aria-label="关闭">×</button><p className="eyebrow">保存之前</p><h2 id="survey-title">完成后，记得回来</h2><p>问卷将在新页面打开。提交后，请返回这里保存你的《识己 · 神话原型》。</p><p className="modal-note">本次结果已经为你临时保留。</p><button className="primary-button" onClick={goToSurvey}>去填写调研<span>↗</span></button><button className="text-button" onClick={() => setSurveyPrompt(false)}>暂时不填</button></div></div>}

@@ -1996,7 +1996,10 @@ button { -webkit-tap-highlight-color: transparent; }
   width:max-content;
   max-width:calc(100vw - 28px);
   margin:0;
-  padding:7px 13px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding:5px 6px 5px 13px;
   border:1px solid rgba(239,205,139,.28);
   border-radius:999px;
   background:rgba(3,25,33,.72);
@@ -2006,7 +2009,23 @@ button { -webkit-tap-highlight-color: transparent; }
   line-height:1.4;
   letter-spacing:.03em;
   text-align:center;
-  pointer-events:none;
   backdrop-filter:blur(10px);
   transform:translateX(-50%);
+}
+.persistent-load-note button {
+  display:grid;
+  width:30px;
+  height:30px;
+  padding:0;
+  border:0;
+  border-radius:50%;
+  background:transparent;
+  color:rgba(255,242,214,.82);
+  font:400 20px/1 system-ui,sans-serif;
+  place-items:center;
+  cursor:pointer;
+}
+.persistent-load-note button:focus-visible {
+  outline:2px solid rgba(239,205,139,.78);
+  outline-offset:1px;
 }
