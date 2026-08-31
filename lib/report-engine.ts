@@ -16,6 +16,7 @@ export type DimensionResult = { key: DimensionKey; label: string; value: number;
 export type MythReport = {
   productName: string; contentVersion: string; archetype: ArchetypeName; archetypeIndex: number;
   archetypeTitle: string; archetypeLine: string; combinedTitle: string;
+  mythBasis: string; coreMotivation: string; shadow: string;
   dimensionResults: DimensionResult[]; strongestDimension: DimensionKey; evidence: string[];
   imageryTitle: string; imageryShort: string; imageryLine: string; lifeCopy: string;
   valueChain: string[]; valueSummary: string; coreProposition: string;
@@ -27,7 +28,7 @@ export type MythReport = {
 export const QUESTIONS: Question[] = [
   { id: 1, text: '连着忙了一周，你最常有的感觉是？', options: { A: '得先抽身出来，把这几天的事在脑子里过一遍', B: '得找人说说话，不然情绪一直堵着', C: '没做完的事一直拽着我，停不下来', D: '反而越忙脑子越清楚，停着才难受' } },
   { id: 2, text: '别人说你太拼，你心里更接近？', options: { A: '我只是看不下去事情在我眼前坏掉', B: '做完了，我才算对自己有个交代', C: '投入进去的时候，我才觉得自己是活着的', D: '我没觉得在拼，只是顺着劲往前走' } },
-  { id: 3, text: '事情卡住的时候，最耗你的是什么？', options: { A: '事都压在我这儿，没人能接手', B: '明知该放手，心里就是放不下', C: '该有人顶上的时候，一个都没有', D: '被别人的节奏带着走，我最受不了' } },
+  { id: 3, text: '事情卡住的时候，最耗你的是什么？', options: { A: '事都压在我这儿，没人能接手', B: '事情没做完，心就放不下来', C: '该有人顶上的时候，一个都没有', D: '被别人的节奏带着走，我最受不了' } },
   { id: 4, text: '接到一个说不太清的新任务，你会先？', options: { A: '拆成能下手的小块，一块块磨', B: '先找到最要命的那一点', C: '先凭感觉试一把，做着做着就明白了', D: '先弄明白整件事大概是怎么回事' } },
   { id: 5, text: '你一般怎么缓过来？', options: { A: '做成一件像样的事，我才歇得下来', B: '换件完全不相干的事，脑子就松了', C: '一个人待着，让乱的念头自己落下来', D: '和懂我的人待着，不用多解释' } },
   { id: 6, text: '碰到一个没见过又很复杂的事，你最先会？', options: { A: '先试一下，看反馈再说', B: '先看看整体的路数和规律', C: '先想这事会影响到谁', D: '先弄清楚这事该由谁负责' } },
@@ -71,13 +72,13 @@ const DIM_SLOTS: Record<DimensionKey, Record<ArchetypeName, number>> = {
   action:{伏羲:3,女娲:4,大禹:4,精卫:3,后羿:3,哪吒:3}, motivation:{伏羲:4,女娲:3,大禹:2,精卫:2,后羿:2,哪吒:3},
 };
 
-const PROFILE: Record<ArchetypeName, { title:string; line:string; drive:string; overuse:string; signal:string; dimension:Record<DimensionKey,string> }> = {
-  伏羲:{title:'观局者',line:'你更习惯先辨认关系与规律，再决定自己从哪里进入。',drive:'把混乱读出结构',overuse:'不断增加理解，却迟迟没有让判断进入行动',signal:'信息仍在增加，但你已经很久没有形成一个明确决定',dimension:{energy:'你需要从持续输入中抽身，让杂乱的信息自行沉淀。',cognition:'你会先寻找整体路数，以及不同部分为什么这样连接。',action:'你更愿意理解整条路径之后再迈步，行动需要一个说得通的框架。',motivation:'当复杂事物逐渐出现秩序，你会重新获得力量。'}},
-  女娲:{title:'连缀者',line:'你会在关系或事物出现裂缝时，本能地寻找重新连接的可能。',drive:'让断裂重新形成连接',overuse:'为了维持完整而不断调整自己，直到自己的位置变得模糊',signal:'你开始反复猜测别人需要什么，却很少问自己是否仍愿意',dimension:{energy:'被理解和真实交流能够帮助你松开积压的情绪。',cognition:'你会自然看见一个决定将影响谁，以及关系是否能够承受。',action:'你擅长把不同的人重新带回同一张桌面，让事情继续。',motivation:'关系恢复流动、彼此重新靠近时，你会感到自己的投入有意义。'}},
-  大禹:{title:'担纲者',line:'承诺一旦落在你手里，你会希望它有始有终，不在自己这里中断。',drive:'把责任稳稳承接到结果',overuse:'因为仍然能够承担，便让责任持续扩大到没有结束边界',signal:'事情仍在推进，但你已经默认只有自己能够接住',dimension:{energy:'未完成的责任很难从你心里真正退出，做完才容易放下。',cognition:'你会先辨认责任归属、交付标准和谁需要把事情接住。',action:'你习惯先承接，再通过分工和规则让局面稳定下来。',motivation:'重要的事没有在自己这里掉链子，会带给你深层的踏实。'}},
-  精卫:{title:'衔石者',line:'一旦确认一件事值得，你愿意把遥远目标拆成许多次具体坚持。',drive:'让认定的事穿过时间',overuse:'把坚持本身当作意义，错过了重新判断方向的时机',signal:'你已经很累，却仍用“再做一点”推迟是否继续的决定',dimension:{energy:'投入本身会给你力量，但也让你在该停下时更难抽身。',cognition:'你看重细节是否可靠，也看重这件事是否值得自己长期相信。',action:'你擅长把巨大距离拆成可以重复的小动作，一点点磨近。',motivation:'只要内心仍然认定，你不太需要即时掌声来维持方向。'}},
-  后羿:{title:'挺身者',line:'当问题真正出现，你更容易锁定关键位置，站出来让事情发生改变。',drive:'在关键时刻保护重要之物',overuse:'持续站在最前面处理问题，却没有为自己留下恢复和交接',signal:'你又一次先站了出来，却没有确认这次是否真的只能由你完成',dimension:{energy:'目标越清楚，你越容易集中；真正的消耗常来自关键位置长期缺人。',cognition:'你会迅速锁定最要紧的一点，并判断谁需要被保护。',action:'你倾向直接处理、尽快说开，让问题不再继续扩散。',motivation:'关键时刻能够顶上，并让重要的人或事情安稳下来，会点亮你。'}},
-  哪吒:{title:'破局者',line:'你对失效的方式很敏感，也更愿意用自己的选择重新打开可能。',drive:'取回选择并重写旧路径',overuse:'不断推翻旧方式，却没有留下一个能够承接下一步的结果',signal:'刚刚打开一个新方向，又开始想彻底换掉整套做法',dimension:{energy:'当节奏持续被外部牵引，换一个场景或推进方式能帮你取回主动。',cognition:'你相信真实反馈，也会主动寻找旧解释之外的另一种可能。',action:'面对不合适的方法，你很少只是忍耐，而会试着重新开路。',motivation:'能够按自己的方式决定方向，是你持续投入的重要条件。'}},
+const PROFILE: Record<ArchetypeName, { title:string; line:string; drive:string; overuse:string; signal:string; mythBasis:string; coreMotivation:string; shadow:string; dimension:Record<DimensionKey,string> }> = {
+  伏羲:{title:'理解者',line:'你更习惯先辨认关系与规律，再决定自己从哪里进入。',drive:'把混乱读出结构',overuse:'不断增加理解，却迟迟没有让判断进入行动',signal:'信息仍在增加，但你已经很久没有形成一个明确决定',mythBasis:'观象于天、观法于地，始作八卦，以通神明之德、类万物之情（《易·系辞》）；教民结网渔猎、制嫁娶之礼。',coreMotivation:'把说不通的变说得通。世界在他眼里首先是一堆待解的关系。',shadow:'用“我还没想清楚”回避行动与表态。',dimension:{energy:'你需要从持续输入中抽身，让杂乱的信息自行沉淀。',cognition:'你会先寻找整体路数，以及不同部分为什么这样连接。',action:'你更愿意理解整条路径之后再迈步，行动需要一个说得通的框架。',motivation:'当复杂事物逐渐出现秩序，你会重新获得力量。'}},
+  女娲:{title:'连接者',line:'你会在关系或事物出现裂缝时，本能地寻找重新连接的可能。',drive:'让断裂重新形成连接',overuse:'为了维持完整而不断调整自己，直到自己的位置变得模糊',signal:'你开始反复猜测别人需要什么，却很少问自己是否仍愿意',mythBasis:'抟黄土造人；炼五色石以补苍天，断鳌足以立四极，杀黑龙以济冀州，积芦灰以止淫水（《淮南子·览冥训》）。',coreMotivation:'不忍——看不下去事情在眼前坏掉，也看不下去人受伤。',shadow:'用“维持关系”代替“解决问题”，回避必要的冲突。',dimension:{energy:'被理解和真实交流能够帮助你松开积压的情绪。',cognition:'你会自然看见一个决定将影响谁，以及关系是否能够承受。',action:'你擅长把不同的人重新带回同一张桌面，让事情继续。',motivation:'关系恢复流动、彼此重新靠近时，你会感到自己的投入有意义。'}},
+  大禹:{title:'承担者',line:'承诺一旦落在你手里，你会希望它有始有终，不在自己这里中断。',drive:'把责任稳稳承接到结果',overuse:'因为仍然能够承担，便让责任持续扩大到没有结束边界',signal:'事情仍在推进，但你已经默认只有自己能够接住',mythBasis:'鲧之子。受命治水，改堵为疏，居外十三年，三过家门而不入；划定九州（《史记·夏本纪》《尚书·禹贡》）。',coreMotivation:'交代——对事有个交代，对自己有个交代。',shadow:'把“该不该我做”和“我能不能做”混在一起，什么都接。',dimension:{energy:'未完成的责任很难从你心里真正退出，做完才容易放下。',cognition:'你会先辨认责任归属、交付标准和谁需要把事情接住。',action:'你习惯先承接，再通过分工和规则让局面稳定下来。',motivation:'重要的事没有在自己这里掉链子，会带给你深层的踏实。'}},
+  精卫:{title:'深耕者',line:'一旦确认一件事值得，你愿意把遥远目标拆成许多次具体坚持。',drive:'让认定的事穿过时间',overuse:'把坚持本身当作意义，错过了重新判断方向的时机',signal:'你已经很累，却仍用“再做一点”推迟是否继续的决定',mythBasis:'炎帝之少女女娃，游于东海，溺而不返，化为精卫，常衔西山之木石，以堙于东海（《山海经·北山经》）。',coreMotivation:'认——这件事我认了，就一直做下去。',shadow:'把“坚持”变成“放不下”，明知无益也不肯松手。',dimension:{energy:'投入本身会给你力量，但也让你在该停下时更难抽身。',cognition:'你看重细节是否可靠，也看重这件事是否值得自己长期相信。',action:'你擅长把巨大距离拆成可以重复的小动作，一点点磨近。',motivation:'只要内心仍然认定，你不太需要即时掌声来维持方向。'}},
+  后羿:{title:'守护者',line:'当问题真正出现，你更容易锁定关键位置，站出来让事情发生改变。',drive:'在关键时刻保护重要之物',overuse:'持续站在最前面处理问题，却没有为自己留下恢复和交接',signal:'你又一次先站了出来，却没有确认这次是否真的只能由你完成',mythBasis:'尧之时十日并出，焦禾稼、杀草木，民无所食；尧乃使羿上射十日，下杀猰貐、凿齿、九婴、大风、封豨、修蛇，万民皆喜（《淮南子·本经训》）。',coreMotivation:'出手——能解决的事，别让它烂在那儿。',shadow:'把“出手”变成“抢”，用解决代替理解。',dimension:{energy:'目标越清楚，你越容易集中；真正的消耗常来自关键位置长期缺人。',cognition:'你会迅速锁定最要紧的一点，并判断谁需要被保护。',action:'你倾向直接处理、尽快说开，让问题不再继续扩散。',motivation:'关键时刻能够顶上，并让重要的人或事情安稳下来，会点亮你。'}},
+  哪吒:{title:'破局者',line:'你对失效的方式很敏感，也更愿意用自己的选择重新打开可能。',drive:'取回选择并重写旧路径',overuse:'不断推翻旧方式，却没有留下一个能够承接下一步的结果',signal:'刚刚打开一个新方向，又开始想彻底换掉整套做法',mythBasis:'灵珠子转世。闹海杀敖丙、抽筋扒皮；后剔骨还父、削肉还母；太乙真人以莲花荷叶重塑其身（《封神演义》《西游记》）。',coreMotivation:'不被定义——谁规定我该是什么样，我就要把它掀了。',shadow:'为了证明不被控制，把有价值的东西也一起推翻。',dimension:{energy:'当节奏持续被外部牵引，换一个场景或推进方式能帮你取回主动。',cognition:'你相信真实反馈，也会主动寻找旧解释之外的另一种可能。',action:'面对不合适的方法，你很少只是忍耐，而会试着重新开路。',motivation:'能够按自己的方式决定方向，是你持续投入的重要条件。'}},
 };
 
 const STEM_ELEMENT:Record<string,Element>={甲:'wood',乙:'wood',丙:'fire',丁:'fire',戊:'earth',己:'earth',庚:'metal',辛:'metal',壬:'water',癸:'water'};
@@ -87,13 +88,12 @@ const CONTROLS:Record<Element,Element>={wood:'earth',earth:'water',water:'fire',
 const SEASON_BY_MONTH:Record<string,Season>={寅:'spring',卯:'spring',辰:'spring',巳:'summer',午:'summer',未:'summer',申:'autumn',酉:'autumn',戌:'autumn',亥:'winter',子:'winter',丑:'winter'};
 const TEN_GOD_GROUP:Record<string,Channel>={比肩:'peer',劫财:'peer',食神:'output',伤官:'output',偏财:'result',正财:'result',七杀:'rule',正官:'rule',偏印:'input',正印:'input'};
 const HOUR_MIDDLE:Record<Exclude<HourOption,'unknown'>,[number,number]>={zi_early:[0,30],chou:[2,0],yin:[4,0],mao:[6,0],chen:[8,0],si:[10,0],wu:[12,0],wei:[14,0],shen:[16,0],you:[18,0],xu:[20,0],hai:[22,0],zi_late:[23,30]};
-const IMAGERY:Record<Season,Record<Channel,[string,string]>>={
-  spring:{input:['雨前的土壤','雨前土壤'],output:['抽枝的新柳','抽枝新柳'],result:['向阳的苗圃','向阳苗圃'],rule:['分畦的春田','分畦春田'],peer:['并生的竹影','并生竹影']},
-  summer:{input:['树荫下的深井','树荫深井'],output:['穿林的长风','穿林长风'],result:['盛夏的果园','盛夏果园'],rule:['清楚的河岸','清楚河岸'],peer:['相接的树冠','相接树冠']},
-  autumn:{input:['收声的谷仓','收声谷仓'],output:['出谷的清风','出谷清风'],result:['成熟的稻穗','成熟稻穗'],rule:['清晰的山脊','清晰山脊'],peer:['并行的雁阵','并行雁阵']},
-  winter:{input:['雪下的泉眼','雪下泉眼'],output:['冬夜里的篝火','冬夜篝火'],result:['封存的种子','封存种子'],rule:['结冰的河岸','结冰河岸'],peer:['围炉的灯影','围炉灯影']},
+const IMAGERY:Record<Season,{short:string;copy:string}>={
+  spring:{short:'春·破土',copy:'像种子顶开冻土时的那道裂痕'},
+  summer:{short:'夏·穿行',copy:'像阳光穿过树叶'},
+  autumn:{short:'秋·成熟',copy:'像稻穗低垂的那一瞬间'},
+  winter:{short:'冬·燃点',copy:'像冬夜的一点火星'},
 };
-const SEASON_LINE:Record<Season,string>={spring:'新意正在生长，真正重要的是让它找到可以扎根的位置。',summer:'光与热推动力量向外展开，节奏决定它能够走多远。',autumn:'清晰来自取舍；留下真正重要的，力量才会聚拢。',winter:'表面安静时，内部仍有水流；支点会让积累重新向前。'};
 const CHANNEL_META:Record<Channel,{label:string;value:string;need:string;action:string}>={
   input:{label:'理解与吸收',value:'把复杂信息整理成新的理解入口',need:'一次表达或小范围验证',action:'把最想确认的一条判断写成问题，用一次低成本尝试换回真实反馈'},
   output:{label:'表达与创造',value:'让想法通过表达和试做进入现实',need:'明确对象、反馈与完成节点',action:'为眼前最想推进的想法，只设一个对象和一个完成标准'},
@@ -101,6 +101,8 @@ const CHANNEL_META:Record<Channel,{label:string;value:string;need:string;action:
   rule:{label:'规则与责任',value:'让边界、标准与责任重新服务于重要目标',need:'责任、权限与结束条件同时清楚',action:'从当前责任中选一项，分别写下必须保留的目标、可以重谈的方法和不能扩大的边界'},
   peer:{label:'自主与协作',value:'在共同节奏中保留自己的判断和推进位置',need:'自己的决定与共同决定被分开',action:'把眼前的决定分成“我决定、共同决定、不由我承担”三栏，只先处理第一栏'},
 };
+export const SEASON_LABEL:Record<Season,string>={spring:'春',summer:'夏',autumn:'秋',winter:'冬'};
+export const CHANNEL_LABEL:Record<Channel,string>={input:'理解与吸收',output:'表达与创造',result:'投入与结果',rule:'规则与责任',peer:'自主与协作'};
 const DIM_VALUE:Record<DimensionKey,string>={energy:'能量调度',cognition:'判断与理解',action:'行动与推进',motivation:'持续投入'};
 const FOCUS_SCENE:Record<Focus,string>={energy:'一次从投入走向消耗的变化',cognition:'一次真正影响判断的选择',action:'一次需要开始或推进的行动',motivation:'一次让自己愿意持续投入的时刻',overall:'一段完整的工作或生活循环'};
 
@@ -134,12 +136,12 @@ function scoreAnswers(answers:AnswerKey[]){
 }
 
 export function generateMythReport(answers:AnswerKey[],birth:BirthData,focus:Focus):MythReport{
-  if(answers.length!==18)throw new Error('answers');const{archetype,dimensionScores}=scoreAnswers(answers);const profile=PROFILE[archetype];const life=calculateLife(birth);const[imageryTitle,imageryShort]=IMAGERY[life.season][life.channel];
+  if(answers.length!==18)throw new Error('answers');const{archetype,dimensionScores}=scoreAnswers(answers);const profile=PROFILE[archetype];const life=calculateLife(birth);const imagery=IMAGERY[life.season];const{short:imageryTitle,short:imageryShort,copy:imageryLine}=imagery;
   const dimensionResults=DIMENSIONS.map(dim=>({key:dim.key,label:dim.label,value:dimensionScores[dim.key],copy:profile.dimension[dim.key]}));const strongestDimension=[...dimensionResults].sort((a,b)=>b.value-a.value)[0].key;
   const evidence=answers.map((answer,index)=>({answer,index,matched:KEY[index+1][answer]===archetype})).filter(item=>item.matched).slice(0,3).map(item=>QUESTIONS[item.index].options[item.answer]);const channel=CHANNEL_META[life.channel];
   const strengthCopy=life.strength==='weak'?'这股力量更需要稳定支点和可控范围，承接条件不足时，消耗会比结果更早出现。':life.strength==='strong'?'你具备继续推动的力量，更重要的是为它安排出口、边界和可以停下的位置。':'你的承载接近动态平衡，状态更取决于力量能否按顺序进入现实，而不是单纯再加一把劲。';
   const flowCopy=life.flowComplete?`当前结构已经有一部分流通条件，${channel.value}更容易留下可以继续承接的结果。`:`当前更值得补上的，是${channel.need}；它会决定这股力量能否从倾向走向稳定价值。`;
-  return{productName:'识己 · 神话原型',contentVersion:'4.0',archetype,archetypeIndex:ARCHETYPES.indexOf(archetype),archetypeTitle:profile.title,archetypeLine:profile.line,combinedTitle:`「${imageryShort}」的${archetype}`,dimensionResults,strongestDimension,evidence,imageryTitle,imageryShort,imageryLine:SEASON_LINE[life.season],lifeCopy:`你的力量更容易通过“${channel.label}”启动。${strengthCopy}${flowCopy}`,valueChain:[profile.drive,DIM_VALUE[strongestDimension],channel.value,`${archetype}式力量形成可被现实承接的价值`],valueSummary:`“${profile.drive}”这股倾向，最容易通过${DIM_VALUE[strongestDimension]}进入${channel.label}这条通道。真正形成价值的部分，不只是拥有这种倾向，而是让它获得对象、边界和反馈，最终留下一个能够继续向前的结果。`,coreProposition:`${profile.overuse}。当“${channel.need}”这一条件尚未具备时，这种惯性会更明显。你需要留意的不是要不要放弃这股力量，而是它是否仍然通向自己真正认可的结果。`,earlySignal:profile.signal,observation:`接下来一周，留意${FOCUS_SCENE[focus]}：当你更像“${archetype}”时，哪一个条件让这股力量形成了价值？它又是从哪一步开始失去比例？`,smallAction:channel.action,dayElement:life.dayElement,dayPolarity:life.dayPolarity,season:life.season,channel:life.channel,strength:life.strength,flowComplete:life.flowComplete};
+  return{productName:'识己 · 神话原型',contentVersion:'4.0',archetype,archetypeIndex:ARCHETYPES.indexOf(archetype),archetypeTitle:profile.title,archetypeLine:profile.line,mythBasis:profile.mythBasis,coreMotivation:profile.coreMotivation,shadow:profile.shadow,combinedTitle:`「${imageryShort}」的${archetype}`,dimensionResults,strongestDimension,evidence,imageryTitle,imageryShort,imageryLine,lifeCopy:`你的力量更容易通过“${channel.label}”启动。${strengthCopy}${flowCopy}`,valueChain:[profile.drive,DIM_VALUE[strongestDimension],channel.value,`${archetype}式力量形成可被现实承接的价值`],valueSummary:`“${profile.drive}”这股倾向，最容易通过${DIM_VALUE[strongestDimension]}进入${channel.label}这条通道。真正形成价值的部分，不只是拥有这种倾向，而是让它获得对象、边界和反馈，最终留下一个能够继续向前的结果。`,coreProposition:`${profile.overuse}。当“${channel.need}”这一条件尚未具备时，这种惯性会更明显。你需要留意的不是要不要放弃这股力量，而是它是否仍然通向自己真正认可的结果。`,earlySignal:profile.signal,observation:`接下来一周，留意${FOCUS_SCENE[focus]}：当你更像“${archetype}”时，哪一个条件让这股力量形成了价值？它又是从哪一步开始失去比例？`,smallAction:channel.action,dayElement:life.dayElement,dayPolarity:life.dayPolarity,season:life.season,channel:life.channel,strength:life.strength,flowComplete:life.flowComplete};
 }
 
 export function daysInMonth(year:number,month:number){if(!year||!month)return 31;return new Date(year,month,0).getDate();}

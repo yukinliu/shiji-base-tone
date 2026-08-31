@@ -4,7 +4,7 @@ import { toPng } from 'html-to-image';
 import QRCode from 'qrcode';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  FOCUS_OPTIONS, QUESTIONS, daysInMonth, generateMythReport,
+  FOCUS_OPTIONS, QUESTIONS, CHANNEL_LABEL, SEASON_LABEL, daysInMonth, generateMythReport,
   type AnswerKey, type BirthData, type DimensionKey, type Focus, type HourOption, type MythReport,
 } from '../lib/report-engine';
 
@@ -108,9 +108,49 @@ const HOURS: { value: HourOption; label: string }[] = [
 const EMPTY_BIRTH: BirthData = { year: '', month: '', day: '', hour: '' };
 const ANSWER_KEYS: AnswerKey[] = ['A', 'B', 'C', 'D'];
 const SIGIL_LABELS: Record<DimensionKey, string> = { energy: '节奏', cognition: '认知', action: '行动', motivation: '动力' };
+const ARCHETYPE_POEMS = {
+  伏羲: ['静观天地见玄机', '一画开天启人伦', '以慧心照万世不迷'],
+  女娲: ['慈心炼石补苍天', '抟土造人藏深情', '以孤身护人间周全'],
+  后羿: ['挽弓独对九重天', '神箭无言护苍生', '以孤胆承天下危难'],
+  精卫: ['身化微羽魂不灭', '衔木填海志不移', '以寸心撼万古沧溟'],
+  大禹: ['三过家门未入内', '凿山导洪身无我', '以凡躯担万民之重'],
+  哪吒: ['闹海抽筋不知惧', '剔骨还亲敢担当', '以赤子心守人间安'],
+} as const;
+const RESULT_HERO_ASSETS: Record<keyof typeof ARCHETYPE_POEMS, { src: string; alt: string }> = {
+  伏羲: { src: '/result-heroes/fuxi-v1.png', alt: '伏羲静观山海与星空中的秩序微光' },
+  女娲: { src: '/result-heroes/nuwa-v1.png', alt: '女娲在山海云光之间炼石补天' },
+  大禹: { src: '/result-heroes/dayu-v1.png', alt: '大禹持杖立于山峡洪流之间' },
+  精卫: { src: '/result-heroes/jingwei-v2.png', alt: '精卫衔石面对辽阔沧海' },
+  后羿: { src: '/result-heroes/houyi-v4.png', alt: '后羿挽弓立于山海与星空之间' },
+  哪吒: { src: '/result-heroes/nezha-v1.png', alt: '哪吒乘风火轮穿过山海云光' },
+};
 
 function Brand() {
-  return <div className="brand"><span className="brand-mark">识</span><span>刘迷糊丨自我探索</span></div>;
+  return <div className="brand"><span className="brand-mark">识</span><span>刘迷糊丨自我探索</span><small>识己</small></div>;
+}
+
+function RevelationOrbit() {
+  return (
+    <div className="revelation-orbit" aria-hidden="true">
+      <span className="revelation-ring ring-outer" />
+      <span className="revelation-ring ring-middle" />
+      <span className="revelation-ring ring-inner" />
+      <span className="revelation-sweep" />
+      <span className="revelation-core" />
+      {Array.from({ length: 6 }, (_, index) => <i style={{ '--slot': index } as React.CSSProperties} key={index} />)}
+    </div>
+  );
+}
+
+function VeiledArchetypes() {
+  return (
+    <div className="landing-figures" aria-hidden="true">
+      <img className="veiled-collage" src="myth-archetypes-hero.jpg" alt="" />
+      {Array.from({ length: 6 }, (_, index) => (
+        <span className={`veiled-figure figure-${index}`} key={index}><img src={`portraits/${index}.jpg`} alt="" /></span>
+      ))}
+    </div>
+  );
 }
 
 function MythPortrait({ index, className = '', dataUrl = '' }: { index: number; className?: string; dataUrl?: string }) {
@@ -130,6 +170,39 @@ function SceneAtmosphere() {
   return <div className="scene-atmosphere" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /><i /></div>;
 }
 
+function ResultHero({ report, heroDataUrl = '', exportMode = false }: { report: MythReport; heroDataUrl?: string; exportMode?: boolean }) {
+  const archetype = report.archetype as keyof typeof ARCHETYPE_POEMS;
+  const hero = RESULT_HERO_ASSETS[archetype];
+  return (
+    <section className={`result-hero result-master-hero${exportMode ? ' is-export' : ''} archetype-${report.archetypeIndex} tone-${report.dayElement} season-${report.season} ${themeClass(report)}`}>
+      <div className="result-master-canvas">
+        <img className="result-master-art" src={heroDataUrl || hero.src} alt={hero.alt} draggable={false} />
+        <div className="result-master-inner">
+          <Brand />
+          <div className="result-poem" aria-label={ARCHETYPE_POEMS[archetype].join('，')}>
+            {ARCHETYPE_POEMS[archetype].map(line => <span key={line}>{line}</span>)}
+          </div>
+          <div className="result-master-copy">
+            <div className="result-master-identity">
+              <p className="result-scene">{SEASON_LABEL[report.season]} · {CHANNEL_LABEL[report.channel]}</p>
+              <p className="result-kicker"><span />与你最接近的是<span /></p>
+              <h1>{report.archetype}</h1>
+              <p className="result-master-role"><span />{report.archetypeTitle}<span /></p>
+              <p className="result-line">{report.archetypeLine}</p>
+            </div>
+            <div className="result-facts result-master-facts">
+              <p><i>神话依据</i><span>{report.mythBasis}</span></p>
+              <p><i>核心动机</i><span>{report.coreMotivation}</span></p>
+              <p><i>阴影</i><span>{report.shadow}</span></p>
+              <p className="result-imagery"><i>生命意象</i><span>{report.imageryTitle}</span></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function DimensionSigil({ report, compact = false }: { report: MythReport; compact?: boolean }) {
   const values = report.dimensionResults.map(dimension => dimension.value);
   const minimum = Math.min(...values);
@@ -137,51 +210,94 @@ function DimensionSigil({ report, compact = false }: { report: MythReport; compa
   const range = maximum - minimum;
   return (
     <div className={`dimension-sigil ${compact ? 'is-compact' : ''}`} aria-label="你的四维纹章">
-      {report.dimensionResults.map(dimension => {
-        const relative = range > .001 ? (dimension.value - minimum) / range : .48;
-        const level = 42 + relative * 58;
-        return <div className={dimension.key === report.strongestDimension ? 'sigil-axis is-strongest' : 'sigil-axis'} key={dimension.key}>
-          <div className="sigil-track"><i style={{ '--level': `${level}%` } as React.CSSProperties} /></div>
-          <span>{SIGIL_LABELS[dimension.key]}</span>
-        </div>;
-      })}
+      {(() => {
+        const strong = strongestSet(report);
+        return report.dimensionResults.map(dimension => {
+          const relative = range > .001 ? (dimension.value - minimum) / range : .48;
+          const level = 42 + relative * 58;
+          return <div className={strong.has(dimension.key) ? 'sigil-axis is-strongest' : 'sigil-axis'} key={dimension.key}>
+            <div className="sigil-track"><i style={{ '--level': `${level}%` } as React.CSSProperties} /></div>
+            <span>{SIGIL_LABELS[dimension.key]}</span>
+          </div>;
+        });
+      })()}
     </div>
   );
 }
 
+// D18：并列失真处理——最高分并列时不再单独点名，改说“同时亮起”。
+function strongestSet(report: MythReport) {
+  const max = Math.max(...report.dimensionResults.map(dimension => dimension.value));
+  return new Set(report.dimensionResults.filter(dimension => max - dimension.value < 1e-9).map(dimension => dimension.key));
+}
+
 function sigilInsight(report: MythReport) {
   const ordered = [...report.dimensionResults].sort((a, b) => b.value - a.value);
+  const tied = ordered.filter(dimension => ordered[0].value - dimension.value < 1e-9);
+  if (tied.length === 2) return `在你的四维纹章里，「${tied[0].label}」与「${tied[1].label}」同时亮起，互为支点。`;
+  if (tied.length > 2) return `在你的四维纹章里，${tied.map(dimension => `「${dimension.label}」`).join('、')}同时亮起，难分主次。`;
   return `在你的四维纹章里，${ordered[0].label}最先亮起，${ordered[1].label}为它提供第二个支点。`;
+}
+
+// 长图压缩定稿①的另一半：最强项之外，其余维度用一句话交代位置。
+function restInsight(report: MythReport) {
+  const strong = strongestSet(report);
+  const rest = report.dimensionResults.filter(dimension => !strong.has(dimension.key)).sort((a, b) => b.value - a.value);
+  const names = rest.map(dimension => `「${dimension.label}」`);
+  if (names.length === 1) return `${names[0]}紧随其后，构成第二支点。`;
+  if (names.length === 2) return `${names[0]}与${names[1]}紧随其后，构成第二、第三支点。`;
+  if (names.length === 3) return `${names.join('')}紧随其后，构成第二至第四支点。`;
+  return '';
+}
+
+function ImageryTransition({ report, exportMode = false, imageryDataUrl = '' }: { report: MythReport; exportMode?: boolean; imageryDataUrl?: string }) {
+  const artBySeason: Record<MythReport['season'], { src: string; position: string }> = {
+    spring: { src: '/imagery-transitions/spring-season-v2.png', position: '72%' },
+    summer: { src: '/imagery-transitions/summer-passage-v1.png', position: '50%' },
+    autumn: { src: '/imagery-transitions/autumn-maturity-v1.png', position: '66%' },
+    winter: { src: '/imagery-transitions/winter-spark-v1.png', position: '88%' },
+  };
+  const art = artBySeason[report.season];
+  const style = ({ '--imagery-art': `url(${imageryDataUrl || art.src})`, '--imagery-position': art.position } as React.CSSProperties);
+  return (
+    <section className={`imagery-transition${exportMode ? ' is-export' : ''}`} style={style}>
+      <svg className="imagery-transition-curve" viewBox="0 0 1000 120" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M0 0H1000V0C805 112 195 112 0 0Z" />
+      </svg>
+      <span className="imagery-transition-star" aria-hidden="true">✦</span>
+    </section>
+  );
 }
 
 function ReportSections({ report, exportMode = false }: { report: MythReport; exportMode?: boolean }) {
   return (
     <>
       <section className="report-block dimensions-block">
-        <p className="section-index">01</p>
-        <h2>你的四维原型轮廓</h2>
-        <p className="section-lead">同一个原型，会在不同的人身上从不同位置出现。</p>
-        {!exportMode && <DimensionSigil report={report} />}
+        <div className="section-heading dimensions-heading"><p className="section-index">01</p><h2>你的四维原型轮廓</h2></div>
+        {!exportMode && <div className="dimension-overview"><DimensionSigil report={report} compact /><p>{sigilInsight(report)}</p></div>}
         <div className="dimension-list">
-          {report.dimensionResults.map(dimension => (
-            <article className={dimension.key === report.strongestDimension ? 'is-strongest' : ''} key={dimension.key}>
-              <div><h3>{dimension.label}</h3>{dimension.key === report.strongestDimension && <span>这股力量在这里最清楚</span>}</div>
-              <p>{dimension.copy}</p>
-            </article>
-          ))}
+          {(() => {
+            const strong = strongestSet(report);
+            const isTie = strong.size > 1;
+            return report.dimensionResults.map(dimension => (
+              <article className={strong.has(dimension.key) ? 'is-strongest' : ''} key={dimension.key}>
+                <div><h3>{dimension.label}</h3>{strong.has(dimension.key) && <span>{isTie ? '这股力量在这里同样清楚' : '这股力量在这里最清楚'}</span>}</div>
+                <p>{dimension.copy}</p>
+              </article>
+            ));
+          })()}
         </div>
+        {exportMode && <p className="export-rest-line">{restInsight(report)}</p>}
       </section>
 
       <section className="report-block life-block">
-        <p className="section-index">02</p>
-        <h2>你的生命底色</h2>
+        <div className="section-heading"><p className="section-index">02</p><h2>你的生命底色</h2></div>
         <div className="imagery-heading"><span>生命意象</span><h3>{report.imageryTitle}</h3><p>{report.imageryLine}</p></div>
         <p>{report.lifeCopy}</p>
       </section>
 
       <section className="report-block value-block">
-        <p className="section-index">03</p>
-        <h2>你更可能怎样形成价值</h2>
+        <div className="section-heading"><p className="section-index">03</p><h2>你更可能怎样形成价值</h2></div>
         <div className="value-chain">
           {report.valueChain.map((node, index) => <div key={node}><span>{String(index + 1).padStart(2, '0')}</span><p>{node}</p></div>)}
         </div>
@@ -189,50 +305,36 @@ function ReportSections({ report, exportMode = false }: { report: MythReport; ex
       </section>
 
       <section className="report-block proposition-block">
-        <p className="section-index">04</p>
-        <h2>这股力量也需要一个落点</h2>
+        <div className="section-heading"><p className="section-index">04</p><h2>这股力量也需要一个落点</h2></div>
         <p>{report.coreProposition}</p>
       </section>
 
       <section className="report-block action-block">
-        <p className="section-index">05</p>
-        <h2>给此刻的你</h2>
+        <div className="section-heading"><p className="section-index">05</p><h2>当下的你</h2></div>
         <div className="action-grid">
           <article><span>一个早期信号</span><p>{report.earlySignal}</p></article>
           <article><span>可以观察</span><p>{report.observation}</p></article>
           <article><span>一个小行动</span><p>{report.smallAction}</p></article>
         </div>
-        <p className="gentle-ending">不必急着证明它准确。先把这句话带回生活，看它会不会在某个具体时刻被你认出来。</p>
       </section>
     </>
   );
 }
 
-function ExportCard({ report, productQr, wechatQrDataUrl = '', portraitDataUrl = '' }: { report: MythReport; productQr: string; wechatQrDataUrl?: string; portraitDataUrl?: string }) {
+function MapBridge() {
+  return <section className="map-bridge"><p className="section-index">继续探索</p><h2>从神话原型到真实完整的自己</h2><p>如果你还想进一步理解：这些倾向怎样形成、不同维度如何互相影响，以及你当前正在面对什么——《识己 · 自我认知地图》会在完整资料和现实校准的基础上，展开八个自我认知维度、原局核心解析与行动启示。</p></section>;
+}
+
+function ExportCard({ report, productQr, wechatQrDataUrl = '', heroDataUrl = '', imageryDataUrl = '' }: { report: MythReport; productQr: string; wechatQrDataUrl?: string; heroDataUrl?: string; imageryDataUrl?: string }) {
   return (
-    <article className={`export-card tone-${report.dayElement} season-${report.season} ${themeClass(report)}`}>
-      <div className="export-cover">
-        <SceneAtmosphere />
-        <Brand />
-        <p className="eyebrow">我的神话原型</p>
-        {/* WebKit 对 foreignObject 里的 <img dataURL> 支持不稳定，导出卡用 background-image 更稳。 */}
-        <div
-          className="myth-portrait export-portrait"
-          style={{ backgroundImage: portraitDataUrl ? `url(${portraitDataUrl})` : `url(/portraits/${report.archetypeIndex}.jpg)` }}
-          role="img"
-          aria-label="神话原型人物视觉"
-        />
-        <h1 className="result-title">{report.combinedTitle}</h1>
-        <p className="archetype-role">{report.archetypeTitle}</p>
-        <p className="archetype-line">{report.archetypeLine}</p>
-        <DimensionSigil report={report} compact />
-        <p className="sigil-insight">{sigilInsight(report)}</p>
-      </div>
-      <div className="export-content"><ReportSections report={report} exportMode /></div>
-      <div className="export-sign">刘迷糊丨自我探索 · SHIJI</div>
+    <article className={`export-card archetype-${report.archetypeIndex} tone-${report.dayElement} season-${report.season} ${themeClass(report)}`}>
+      <ResultHero report={report} heroDataUrl={heroDataUrl} exportMode />
+      <ImageryTransition report={report} exportMode imageryDataUrl={imageryDataUrl} />
+      <div className="export-content"><ReportSections report={report} /><MapBridge /></div>
+      <div className="export-sign">刘迷糊丨自我探索 · 识己</div>
       <div className="qr-zone">
-        <div className="qr-item"><div><strong>制作你的《识己 · 神话原型》</strong><p>你的生命故事里，住着哪位神话人物？</p></div>{productQr && <img src={productQr} alt="产品二维码" />}</div>
-        <div className="qr-item"><div><strong>添加刘迷糊</strong><p>咨询《识己 · 自我认知八维地图》</p></div><div className="wechat-qr-crop">{wechatQrDataUrl ? <img src={wechatQrDataUrl} alt="刘迷糊微信二维码" /> : <img src="wechat-qr-400.png" alt="刘迷糊微信二维码" />}</div></div>
+        <div className="qr-item"><div><strong><b>识己</b><span>神话原型</span></strong></div><img src={productQr} alt="产品二维码" /></div>
+        <div className="qr-item"><div><strong><b>识己</b><span>自我认知地图</span></strong></div><div className="wechat-qr-crop">{wechatQrDataUrl ? <img src={wechatQrDataUrl} alt="刘迷糊个人二维码" /> : <img src="wechat-qr-400.png" alt="刘迷糊个人二维码" />}</div></div>
       </div>
     </article>
   );
@@ -258,7 +360,8 @@ export default function Home() {
   const [showShareGuide, setShowShareGuide] = useState(false);
   const [productQr, setProductQr] = useState('');
   const [wechatQrDataUrl, setWechatQrDataUrl] = useState('');
-  const [mythPortraitDataUrl, setMythPortraitDataUrl] = useState('');
+  const [resultHeroDataUrl, setResultHeroDataUrl] = useState('');
+  const [imageryDataUrl, setImageryDataUrl] = useState('');
   const exportRef = useRef<HTMLDivElement>(null);
   const surveyActive = useRef(false);
   const surveyLeft = useRef(false);
@@ -271,20 +374,31 @@ export default function Home() {
 
   useEffect(() => {
     const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
-    const restoreDraft = navigation?.type === 'reload' || navigation?.type === 'back_forward';
-    if (restoreDraft) {
-      try {
-        const raw = sessionStorage.getItem(DRAFT_KEY);
-        if (raw) {
-          const draft = JSON.parse(raw);
-          // Restoring an external browser-session snapshot is the purpose of this effect.
-          // eslint-disable-next-line react-hooks/set-state-in-effect
-          setStage(draft.stage || 'landing'); setAnswers(draft.answers || []); setQuestionIndex(draft.questionIndex || 0);
-          setBirth(draft.birth || EMPTY_BIRTH); setFocus(draft.focus || ''); setReport(draft.report || null);
-        }
-      } catch { sessionStorage.removeItem(DRAFT_KEY); }
-    } else {
-      sessionStorage.removeItem(DRAFT_KEY);
+    // 每次正常打开或刷新都从产品开屏进入，避免旧草稿让用户直接落到中间页。
+    // 站外调研返回仍由下方 PENDING_KEY 独立恢复报告。
+    sessionStorage.removeItem(DRAFT_KEY);
+    if (process.env.NODE_ENV === 'development' && new URLSearchParams(window.location.search).get('preview') === 'houyi') {
+      const base = generateMythReport(
+        Array.from({ length: 18 }, () => 'A' as AnswerKey),
+        { year: '1990', month: '6', day: '15', hour: 'unknown' },
+        'overall',
+      );
+      setReport({
+        ...base,
+        archetype: '后羿',
+        archetypeIndex: 4,
+        archetypeTitle: '守护者',
+        archetypeLine: '当问题真正出现，你更容易锁定关键位置，站出来让事情发生改变。',
+        mythBasis: '尧之时十日并出，焦禾稼、杀草木，民无所食；尧乃使羿上射十日，下杀猰貐、凿齿、九婴、大风、封豨、修蛇，万民皆喜（《淮南子·本经训》）。',
+        coreMotivation: '出手——能解决的事，别让它烂在那儿。',
+        shadow: '把“出手”变成“抢”，用解决代替理解。',
+        season: 'summer',
+        channel: 'output',
+        imageryTitle: '夏·穿行',
+        imageryShort: '夏·穿行',
+      });
+      setStage('report');
+      return;
     }
     try {
       const pending = JSON.parse(localStorage.getItem(PENDING_KEY) || 'null');
@@ -301,18 +415,19 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    // 微信二维码：用预缩到 400px 的 wechat-qr-400.png（114KB → 比原图 564KB 快 5 倍）。
     assetToDataUrl('/wechat-qr-400.png', 400).then(setWechatQrDataUrl).catch(() => {});
   }, []);
 
   useEffect(() => {
-    // 原型图：用预切小图内联成 JPEG data URL（比 PNG 小，WebKit foreignObject 更稳）。
-    // 比起 3.97MB 精灵图，加载/内联都快一个数量级，彻底消除手机端“长时间灰度没下文”。
     if (!report) return;
-    assetToDataUrl(`portraits/${report.archetypeIndex}.jpg`, 512, 'image/jpeg', 0.9)
-      .then(setMythPortraitDataUrl)
-      .catch(() => {});
-  }, [report?.archetypeIndex]);
+    const hero = RESULT_HERO_ASSETS[report.archetype as keyof typeof RESULT_HERO_ASSETS];
+    const imageryPath: Record<MythReport['season'], string> = {
+      spring: '/imagery-transitions/spring-season-v2.png', summer: '/imagery-transitions/summer-passage-v1.png',
+      autumn: '/imagery-transitions/autumn-maturity-v1.png', winter: '/imagery-transitions/winter-spark-v1.png',
+    };
+    assetToDataUrl(hero.src, 1100, 'image/jpeg', .9).then(setResultHeroDataUrl).catch(() => {});
+    assetToDataUrl(imageryPath[report.season], 1100, 'image/jpeg', .9).then(setImageryDataUrl).catch(() => {});
+  }, [report?.archetype, report?.season]);
 
   useEffect(() => {
     if (stage === 'landing') return;
@@ -338,6 +453,13 @@ export default function Home() {
   function startFresh() {
     sessionStorage.removeItem(DRAFT_KEY); localStorage.removeItem(PENDING_KEY);
     setStage('intro'); setAnswers([]); setQuestionIndex(0); setBirth(EMPTY_BIRTH); setFocus(''); setReport(null);
+    setUnlocked(SURVEY_GATING !== 'on'); setPendingAvailable(false); setError(''); setMessage(''); setHasSaved(false); setSavedImage('');
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }
+
+  function returnToOpening() {
+    sessionStorage.removeItem(DRAFT_KEY); localStorage.removeItem(PENDING_KEY);
+    setStage('landing'); setAnswers([]); setQuestionIndex(0); setBirth(EMPTY_BIRTH); setFocus(''); setReport(null);
     setUnlocked(SURVEY_GATING !== 'on'); setPendingAvailable(false); setError(''); setMessage(''); setHasSaved(false); setSavedImage('');
     window.scrollTo({ top: 0, behavior: 'auto' });
   }
@@ -401,33 +523,44 @@ export default function Home() {
     try {
       // 字体就绪（最多等 5s，避免个别 webview 里 document.fonts.ready 不触发导致永久挂起）。
       await withTimeout(document.fonts.ready, 5000, '字体就绪');
-      // 本地重新裁出小图 data URL（不依赖 React state 的时机，避免 state 为空时导出卡退回整张精灵图背景）。
-      // 任一步失败都用已有 state 兜底，绝不让截图流程卡死。
-      let portraitUrl = mythPortraitDataUrl;
+      // 导出使用与网页相同的主视觉与四季弧形图，并将图片内联，避免移动端截图丢图。
+      let heroUrl = resultHeroDataUrl;
+      let seasonUrl = imageryDataUrl;
       let wechatUrl = wechatQrDataUrl;
-      // 优先用 useEffect 已预裁好的图；只有 state 还没好时再生，避免重复覆盖导致 WebKit 重新解码赶不及。
-      if (!portraitUrl) {
-        try { portraitUrl = await withTimeout(assetToDataUrl(`portraits/${report.archetypeIndex}.jpg`, 400, 'image/jpeg', 0.9), 6000, '裁原型图'); } catch { /* 用已有值兜底 */ }
-      }
+      let productUrl = productQr;
+      const hero = RESULT_HERO_ASSETS[report.archetype as keyof typeof RESULT_HERO_ASSETS];
+      const seasonPath: Record<MythReport['season'], string> = {
+        spring: '/imagery-transitions/spring-season-v2.png', summer: '/imagery-transitions/summer-passage-v1.png',
+        autumn: '/imagery-transitions/autumn-maturity-v1.png', winter: '/imagery-transitions/winter-spark-v1.png',
+      };
+      if (!heroUrl) try { heroUrl = await withTimeout(assetToDataUrl(hero.src, 1100, 'image/jpeg', .9), 8000, '准备人物主视觉'); } catch { /* 使用页面资源兜底 */ }
+      if (!seasonUrl) try { seasonUrl = await withTimeout(assetToDataUrl(seasonPath[report.season], 1100, 'image/jpeg', .9), 8000, '准备生命意象'); } catch { /* 使用页面资源兜底 */ }
       if (!wechatUrl) {
-        try { wechatUrl = await withTimeout(assetToDataUrl('/wechat-qr-400.png', 400), 6000, '裁微信码'); } catch { /* 用已有值兜底 */ }
+        try { wechatUrl = await withTimeout(assetToDataUrl('/wechat-qr-400.png', 400), 6000, '准备个人二维码'); } catch { /* 用已有值兜底 */ }
       }
-      // 用裁好的小图覆盖导出卡里的 <img>，确保截图时绝不会出现整张 3.97MB 精灵图。
-      const exportPortrait = exportRef.current.querySelector('.export-portrait') as HTMLDivElement | null;
-      if (exportPortrait && portraitUrl) exportPortrait.style.backgroundImage = `url(${portraitUrl})`;
+      if (!productUrl) {
+        const siteUrl = `${window.location.origin}${window.location.pathname}`;
+        try { productUrl = await QRCode.toDataURL(siteUrl, { width: 260, margin: 2, color: { dark: '#17323c', light: '#eef3f2' } }); } catch { /* 保留空码兜底 */ }
+      }
+      const exportHero = exportRef.current.querySelector('.result-master-art') as HTMLImageElement | null;
+      if (exportHero && heroUrl) exportHero.src = heroUrl;
+      const exportImagery = exportRef.current.querySelector('.imagery-transition') as HTMLElement | null;
+      if (exportImagery && seasonUrl) exportImagery.style.setProperty('--imagery-art', `url(${seasonUrl})`);
       const wechatImg = exportRef.current.querySelector('.wechat-qr-crop img') as HTMLImageElement | null;
       if (wechatImg && wechatUrl) wechatImg.src = wechatUrl;
+      const productImg = exportRef.current.querySelector('.qr-item:first-child img') as HTMLImageElement | null;
+      if (productImg && productUrl) productImg.src = productUrl;
       // 等所有内联图绘制完成（最长 8s/张，超时也继续，不卡死）。
       const embeddedImages = Array.from(exportRef.current.querySelectorAll('img'));
       await Promise.all(embeddedImages.map(image => imgReady(image, 8000)));
-      // 额外等背景图绘制完成（用于导出卡的 div background-image）。
-      if (exportPortrait && portraitUrl) {
+      // 额外等弧形意象背景完成解码。
+      if (exportImagery && seasonUrl) {
         await Promise.race([
           new Promise<void>(resolve => {
             const tmp = new Image();
             tmp.onload = () => resolve();
             tmp.onerror = () => resolve();
-            tmp.src = portraitUrl;
+            tmp.src = seasonUrl;
           }),
           new Promise<void>(resolve => setTimeout(resolve, 3000)),
         ]);
@@ -437,7 +570,7 @@ export default function Home() {
       // skipFonts:true 跳过 web 字体抓取（避免字体文件在微信/webview 加载慢导致 toPng 永久挂起）；
       // 外层 withTimeout 作最后兜底：toPng 超时即报错提示，而非「正在制作图片」一直灰着没下文。
       const dataUrl = await withTimeout(
-        toPng(exportRef.current, { pixelRatio: 1, cacheBust: false, backgroundColor: '#e8eeef', skipFonts: true }),
+        toPng(exportRef.current, { pixelRatio: 1, cacheBust: false, backgroundColor: '#f5eee1', skipFonts: true }),
         20000, '生成图片'
       );
       if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) setSavedImage(dataUrl);
@@ -453,8 +586,9 @@ export default function Home() {
   async function shareProduct() {
     if (!report) return;
     const pageUrl = `${window.location.origin}${window.location.pathname}`;
-    const text = `我是${report.combinedTitle}。你的生命故事里，住着哪位神话人物？\n${pageUrl}`;
+    const text = `快来看看你最像的神话人物是谁～我是「${report.archetype}」${report.archetypeTitle}\n\n${pageUrl}`;
     const isWeChat = /micromessenger/i.test(navigator.userAgent);
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     if (isWeChat) {
       // 微信内置浏览器无法用 API 唤起原生分享面板（需后端签名的 JS-SDK）。
       // 改为：顺手复制链接 + 弹出引导浮层，让用户点右上角 ··· 分享。
@@ -463,7 +597,7 @@ export default function Home() {
       return;
     }
     try {
-      if (navigator.share) {
+      if (isMobile && navigator.share) {
         try {
           await navigator.share({ title: '识己 · 神话原型', text, url: pageUrl });
           return;
@@ -494,39 +628,33 @@ export default function Home() {
   return (
     <main className={`app stage-${stage}`}>
       {stage === 'landing' && (
-        <section className="landing-screen">
-          <div className="landing-art"><img src="myth-archetypes-hero.jpg" alt="六位神话人物" /></div>
-          <div className="landing-overlay" />
-          <div className="landing-content"><Brand /><p className="product-name">识己 · 神话原型</p><h1>你的生命故事里，<br />住着哪位神话人物？</h1><p className="landing-copy">看见与你最接近的神话原型，以及这股力量落在怎样的生命底色里。</p><button className="primary-button light" onClick={startFresh}>看见我的神话<span>→</span></button><p className="privacy-line">约3分钟 · 20题 · 完全隐私</p>{pendingAvailable && <button className="resume-button" onClick={continuePending}>继续刚才的报告</button>}</div>
+        <section className="landing-screen cosmic-stage">
+          <div className="landing-content"><Brand /><div className="landing-message"><p className="landing-product">识己 · 神话原型</p><h1>你的生命故事里，<br />住着哪位神话人物？</h1></div><div className="landing-cta"><button className="primary-button light" onClick={startFresh}>看见我的神话<span>→</span></button>{pendingAvailable && <button className="resume-button" onClick={continuePending}>继续刚才的报告</button>}</div></div>
         </section>
       )}
 
       {stage === 'intro' && (
-        <section className="flow-screen intro-screen"><Brand /><div className="mystery-orbit" aria-hidden="true"><span className="cosmic-core" /><b className="star-dust" /><i /><i /><i /><i /><i /><i /></div><div className="screen-copy"><p className="eyebrow">开始之前</p><h1>从第一反应开始</h1><p>这里没有正确答案。请选择更接近日常里的你，而不是你觉得自己应该成为的样子。</p><p className="expectation-line">约 3 分钟 · 18 道题 · 完全隐私</p><button className="primary-button" onClick={() => setStage('questions')}>开始<span>→</span></button></div></section>
+        <section className="flow-screen intro-screen cosmic-stage"><Brand /><div className="intro-layout"><RevelationOrbit /><div className="screen-copy"><h1>从第一反应开始</h1><p className="intro-lines">没有正确答案<br />选「日常里的你」<br />不是「你应该成为的你」</p><button className="primary-button light" onClick={() => setStage('questions')}>开始<span>→</span></button><p className="expectation-line">约 3 分钟 · 18 题 · 完全隐私</p></div></div></section>
       )}
 
       {stage === 'questions' && currentQuestion && (
-        <section className="flow-screen question-screen"><Brand /><div className="question-progress"><div><i style={{ width: `${((questionIndex + 1) / 18) * 100}%` }} /></div><span>{questionIndex + 1} / 18</span></div><div className="question-card"><h1>{currentQuestion.text}</h1><div className="answer-list">{ANSWER_KEYS.map(key => <button className={answers[questionIndex] === key ? 'is-selected' : ''} key={key} onClick={() => chooseAnswer(key)}><span>{currentQuestion.options[key]}</span><i /></button>)}</div><button className="back-link" disabled={questionIndex === 0} onClick={() => setQuestionIndex(index => Math.max(0, index - 1))}>← 上一题</button></div></section>
+        <section className="flow-screen question-screen"><Brand /><div className="question-progress"><div className="progress-track"><i style={{ width: `${((questionIndex + 1) / 18) * 100}%` }} /></div><span>{String(questionIndex + 1).padStart(2, '0')} / 18</span></div><div className="question-card"><h1>{currentQuestion.text}</h1><div className="answer-list">{ANSWER_KEYS.map(key => <button className={answers[questionIndex] === key ? 'is-selected' : ''} key={key} onClick={() => chooseAnswer(key)}><span>{currentQuestion.options[key]}</span><i /></button>)}</div><button className="back-link" disabled={questionIndex === 0} onClick={() => setQuestionIndex(index => Math.max(0, index - 1))}>← 上一题</button></div></section>
       )}
 
       {stage === 'birth' && (
-        <section className="flow-screen form-screen"><Brand /><div className="screen-copy wide"><p className="eyebrow">你的神话原型已经渐渐清晰</p><h1>让它落进你的生命底色</h1><p className="cosmic-copy">隔着宇宙星辰，也许会有 ta 共振。<br />用来绘制你的能量流动——它会是什么样呢？</p><div className="form-card"><h2>出生日期 <small>公历</small></h2><div className="date-grid"><label><span>年</span><select value={birth.year} onChange={event => setBirth(previous => ({ ...previous, year: event.target.value }))}><option value="">选择</option>{years.map(year => <option value={year} key={year}>{year} 年</option>)}</select></label><label><span>月</span><select value={birth.month} onChange={event => setBirth(previous => ({ ...previous, month: event.target.value, day: '' }))}><option value="">选择</option>{Array.from({ length: 12 }, (_, index) => index + 1).map(month => <option value={month} key={month}>{month} 月</option>)}</select></label><label><span>日</span><select value={birth.day} onChange={event => setBirth(previous => ({ ...previous, day: event.target.value }))}><option value="">选择</option>{days.map(day => <option value={day} key={day}>{day} 日</option>)}</select></label><label className="hour-field"><span>出生时辰｜选填</span><select value={birth.hour} onChange={event => setBirth(previous => ({ ...previous, hour: event.target.value as HourOption }))}><option value="">不确定可以跳过</option>{HOURS.map(item => <option value={item.value} key={item.value}>{item.label}</option>)}</select></label></div></div>{error && <p className="error" role="alert">{error}</p>}<button className="primary-button" onClick={continueBirth}>下一页<span>→</span></button></div></section>
+        <section className="flow-screen form-screen"><Brand /><div className="screen-copy wide"><p className="eyebrow">你的神话原型已经渐渐清晰</p><h1>让它落进你的生命底色</h1><p className="cosmic-copy">同一股力量，落在不同的时间里，长出来的样子并不一样。</p><div className="form-card"><h2>出生时空</h2><div className="date-grid"><label><span>年份｜公历</span><select value={birth.year} onChange={event => setBirth(previous => ({ ...previous, year: event.target.value }))}><option value="">选择</option>{years.map(year => <option value={year} key={year}>{year}</option>)}</select></label><label><span>月份</span><select value={birth.month} onChange={event => setBirth(previous => ({ ...previous, month: event.target.value, day: '' }))}><option value="">选择</option>{Array.from({ length: 12 }, (_, index) => index + 1).map(month => <option value={month} key={month}>{month}</option>)}</select></label><label><span>日期</span><select value={birth.day} onChange={event => setBirth(previous => ({ ...previous, day: event.target.value }))}><option value="">选择</option>{days.map(day => <option value={day} key={day}>{day}</option>)}</select></label></div><fieldset className="hour-picker"><legend>出生时辰｜选填</legend>{HOURS.map(item => { const [name, time] = item.label.split('｜'); return <button type="button" className={`${birth.hour === item.value ? 'is-selected' : ''} ${item.value === 'unknown' ? 'is-unknown' : ''}`} key={item.value} onClick={() => setBirth(previous => ({ ...previous, hour: item.value }))}><strong>{name}</strong>{time && <span>{time}</span>}</button>; })}</fieldset></div>{error && <p className="error" role="alert">{error}</p>}<button className="primary-button" onClick={continueBirth}>继续<span>→</span></button></div></section>
       )}
 
       {stage === 'focus' && (
-        <section className="flow-screen focus-screen"><Brand /><div className="screen-copy wide"><p className="eyebrow">最后一题</p><h1>这一次，你最想先看见什么？</h1><p>选择一个此刻最关心的方向。</p><div className="focus-list">{FOCUS_OPTIONS.map(option => <button className={focus === option.value ? 'is-selected' : ''} key={option.value} onClick={() => { setFocus(option.value); setError(''); }}><div><strong>{option.title}</strong><span>{option.detail}</span></div><i /></button>)}</div>{error && <p className="error" role="alert">{error}</p>}<button className="primary-button" onClick={makeReport}>看见我的神话<span>→</span></button></div></section>
+        <section className="flow-screen focus-screen"><Brand /><div className="screen-copy wide"><p className="eyebrow">最后一题</p><h1>选一个此刻最关心的方向</h1><div className="focus-list">{FOCUS_OPTIONS.map(option => <button className={focus === option.value ? 'is-selected' : ''} key={option.value} onClick={() => { setFocus(option.value); setError(''); }}><div><strong>{option.title}</strong><span>{option.detail}</span></div><i /></button>)}</div>{error && <p className="error" role="alert">{error}</p>}<button className="primary-button" onClick={makeReport}>查看我的神话<span>→</span></button></div></section>
       )}
 
       {stage === 'making' && (
-        <section className="making-screen"><div className="making-visual"><div className="making-core" /><i /><i /><i /><i /></div><div className="making-copy"><p className={makingStep >= 0 ? 'active' : ''}>正在整理你的选择轮廓</p><p className={makingStep >= 1 ? 'active' : ''}>正在看见你的神话原型</p><p className={makingStep >= 2 ? 'active' : ''}>你的生命底色正在绽放</p><strong className={makingStep >= 3 ? 'active' : ''}>看见了。</strong></div></section>
+        <section className="making-screen cosmic-stage" onClick={() => report && setStage('reveal')}><Brand /><div className="making-layout"><RevelationOrbit /><div className="making-copy"><p className={makingStep >= 0 ? 'active' : ''}>正在整理你的四维轮廓</p><p className={makingStep >= 1 ? 'active' : ''}>正在看见你的神话原型</p><p className={makingStep >= 2 ? 'active' : ''}>你的生命底色正在绽放</p><strong className={makingStep >= 3 ? 'active' : ''}>看见了</strong></div></div></section>
       )}
 
-      {stage === 'reveal' && report && (
-        <section className={`reveal-screen tone-${report.dayElement} season-${report.season} ${themeClass(report)}`}><Brand /><div className="reveal-card"><SceneAtmosphere /><div className="reveal-head"><p className="eyebrow">在你的选择里，与你最接近的是</p><h1 className="result-title">{report.combinedTitle}</h1><h2>{report.archetypeTitle}</h2></div><div className="reveal-visual"><MythPortrait index={report.archetypeIndex} /></div><div className="reveal-signature"><DimensionSigil report={report} compact /><p>{sigilInsight(report)}</p></div></div><button className="primary-button light reveal-cta" onClick={() => { setStage('report'); setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 30); }}>查看全部<span>↓</span></button></section>
-      )}
-
-      {stage === 'report' && report && (
-        <section className={`report-page tone-${report.dayElement} season-${report.season} ${themeClass(report)}`}><header className="report-cover"><SceneAtmosphere /><Brand /><div className="report-hero"><MythPortrait index={report.archetypeIndex} /><div><p className="eyebrow">我的神话原型</p><h1 className="result-title">{report.combinedTitle}</h1><h2>{report.archetypeTitle}</h2><p>{report.archetypeLine}</p></div></div><DimensionSigil report={report} /></header><div className="report-content"><ReportSections report={report} /><section className="map-bridge"><p className="section-index">继续探索</p><h2>从神话原型到真实完整的自己</h2><p>如果你还想进一步理解：这些倾向怎样形成、不同维度如何互相影响，以及你当前正在面对什么——《识己 · 自我认知八维地图》会在完整资料和现实校准的基础上，展开八个自我认知维度、原局核心解析与行动启示。</p></section><section className="save-area" id="save-area"><div className="save-actions">{renderGate()}<button className="secondary-button" type="button" onClick={startFresh}>重新制作<span>↻</span></button></div>{hasSaved && <button className="secondary-button" onClick={shareProduct}>邀请朋友也来看看<span>↗</span></button>}{message && <p className="status-message" role="status">{message}</p>}</section></div></section>
+      {(stage === 'reveal' || stage === 'report') && report && (
+        <section className={`report-page tone-${report.dayElement} season-${report.season} ${themeClass(report)}`}><ResultHero report={report} /><ImageryTransition report={report} /><div className="report-content" id="report-content"><ReportSections report={report} /><MapBridge /><section className="save-area" id="save-area"><div className="save-actions">{renderGate()}<button className="share-button" type="button" onClick={shareProduct}>分享给朋友<span>↗</span></button><button className="secondary-button" type="button" onClick={returnToOpening}>重新制作<span>↻</span></button></div>{message && <p className="status-message" role="status">{message}</p>}</section></div></section>
       )}
 
       {surveyPrompt && <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="survey-title"><div className="survey-modal"><button className="modal-close" onClick={() => setSurveyPrompt(false)} aria-label="关闭">×</button><p className="eyebrow">保存之前</p><h2 id="survey-title">完成后，记得回来</h2><p>问卷将在新页面打开。提交后，请返回这里保存你的《识己 · 神话原型》。</p><p className="modal-note">本次结果已经为你临时保留。</p><button className="primary-button" onClick={goToSurvey}>去填写调研<span>↗</span></button><button className="text-button" onClick={() => setSurveyPrompt(false)}>暂时不填</button></div></div>}
@@ -545,7 +673,7 @@ export default function Home() {
         </div>
       )}
 
-      {report && <div className="export-stage" aria-hidden="true"><div ref={exportRef}><ExportCard report={report} productQr={productQr} wechatQrDataUrl={wechatQrDataUrl} portraitDataUrl={mythPortraitDataUrl} /></div></div>}
+      {report && <div className="export-stage" aria-hidden="true"><div ref={exportRef}><ExportCard report={report} productQr={productQr} wechatQrDataUrl={wechatQrDataUrl} heroDataUrl={resultHeroDataUrl} imageryDataUrl={imageryDataUrl} /></div></div>}
     </main>
   );
 }

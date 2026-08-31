@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>识己·神话原型｜人物与四季意象验收</title>
+  <link rel="stylesheet" href="/app/globals.css" />
+  <style>
+    .preview-switcher{position:relative;z-index:50;width:min(100%,887px);margin:0 auto;padding:16px 18px 14px;color:#f5e4c1;background:#071820;border-bottom:1px solid rgba(224,164,88,.35)}
+    .preview-switcher strong{display:block;margin-bottom:5px;font-size:14px;letter-spacing:.08em}
+    .preview-switcher p{margin:0 0 12px;color:rgba(245,228,193,.65);font-size:11px;line-height:1.55}
+    .preview-switcher nav{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px}
+    .preview-switcher .imagery-nav{grid-template-columns:repeat(4,minmax(0,1fr));margin-top:11px;padding-top:11px;border-top:1px solid rgba(224,164,88,.16)}
+    .preview-switcher button{min-height:38px;border:1px solid rgba(224,164,88,.32);border-radius:999px;color:#ead8b5;background:rgba(255,255,255,.035);cursor:pointer}
+    .preview-switcher button[aria-current="true"]{border-color:#d8a65c;color:#071820;background:#ddb566}
+    @media(max-width:600px){.preview-switcher nav{grid-template-columns:repeat(3,1fr)}.preview-switcher .imagery-nav{grid-template-columns:repeat(2,1fr)}.preview-switcher{padding:13px 14px}.preview-switcher button{min-height:36px}}
+  </style>
+</head>
+<body>
+  <aside class="preview-switcher">
+    <strong>人物 × 四季代表意象验收</strong>
+    <p>人物来自 18 题；季节、功能通道与生命意象来自出生时间。此页可交叉切换，用于检查人物主图与意象过渡的匹配性。</p>
+    <nav aria-label="选择人物">
+      <button type="button" data-name="伏羲" aria-current="true">伏羲</button>
+      <button type="button" data-name="女娲">女娲</button>
+      <button type="button" data-name="大禹">大禹</button>
+      <button type="button" data-name="精卫">精卫</button>
+      <button type="button" data-name="后羿">后羿</button>
+      <button type="button" data-name="哪吒">哪吒</button>
+    </nav>
+    <nav class="imagery-nav" aria-label="选择四季代表意象">
+      <button type="button" data-imagery="春·破土">春·破土</button>
+      <button type="button" data-imagery="夏·穿行" aria-current="true">夏·穿行</button>
+      <button type="button" data-imagery="秋·成熟">秋·成熟</button>
+      <button type="button" data-imagery="冬·燃点">冬·燃点</button>
+    </nav>
+  </aside>
+  <main class="app stage-report">
+    <section class="report-page theme-summer-output" id="report-page">
+      <section class="result-hero result-master-hero archetype-0 season-summer theme-summer-output" id="hero">
+        <div class="result-master-canvas">
+          <img class="result-master-art" id="hero-art" src="/public/result-heroes/fuxi-v1.png" alt="伏羲静观山海与星空中的秩序微光" />
+          <div class="result-master-inner">
+            <div class="brand"><span class="brand-mark">识</span><span>刘迷糊丨自我探索</span><small>识己</small></div>
+            <div class="result-poem" id="poem"></div>
+            <div class="result-master-copy">
+              <div class="result-master-identity">
+                <p class="result-scene" id="result-scene">夏 · 表达与创造</p>
+                <p class="result-kicker"><span></span>与你最接近的是<span></span></p>
+                <h1 id="archetype-name">伏羲</h1>
+                <p class="result-master-role"><span></span><b id="archetype-role">理解者</b><span></span></p>
+                <p class="result-line" id="archetype-line"></p>
+              </div>
+              <div class="result-facts result-master-facts">
+                <p><i>神话依据</i><span id="myth-basis"></span></p>
+                <p><i>核心动机</i><span id="motivation"></span></p>
+                <p><i>阴影</i><span id="shadow"></span></p>
+                <p class="result-imagery"><i>生命意象</i><span id="imagery-title">夏 · 穿行</span></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="imagery-transition" id="imagery-transition" style="--imagery-art:url('/public/imagery-transitions/summer-passage-v1.png')">
+        <svg class="imagery-transition-curve" viewBox="0 0 1000 120" preserveAspectRatio="none" aria-hidden="true"><path d="M0 0H1000V0C805 112 195 112 0 0Z"></path></svg>
+        <span class="imagery-transition-star" aria-hidden="true">✦</span>
+      </section>
+      <div class="report-content">
+        <section class="report-block dimensions-block">
+          <div class="section-heading dimensions-heading"><p class="section-index">01</p><h2>你的四维原型轮廓</h2></div>
+          <p style="margin:0;color:#53635f;line-height:1.8">此处以下沿用已确认的紧凑报告骨架；本页重点验收上方人物结果卡。</p>
+        </section>
+      </div>
+    </section>
+  </main>
+  <script>
+    const profiles={
+      伏羲:{index:0,asset:'fuxi-v1.png',alt:'伏羲静观山海与星空中的秩序微光',role:'理解者',poem:['静观天地见玄机','一画开天启人伦','以慧心照万世不迷'],line:'你更习惯先辨认关系与规律，再决定自己从哪里进入。',basis:'观象于天、观法于地，始作八卦，以通神明之德、类万物之情（《易·系辞》）；教民结网渔猎、制嫁娶之礼。',motivation:'把说不通的变说得通。世界在他眼里首先是一堆待解的关系。',shadow:'用“我还没想清楚”回避行动与表态。'},
+      女娲:{index:1,asset:'nuwa-v1.png',alt:'女娲在山海云光之间炼石补天',role:'连接者',poem:['慈心炼石补苍天','抟土造人藏深情','以孤身护人间周全'],line:'你会在关系或事物出现裂缝时，本能地寻找重新连接的可能。',basis:'抟黄土造人；炼五色石以补苍天，断鳌足以立四极，杀黑龙以济冀州，积芦灰以止淫水（《淮南子·览冥训》）。',motivation:'不忍——看不下去事情在眼前坏掉，也看不下去人受伤。',shadow:'用“维持关系”代替“解决问题”，回避必要的冲突。'},
+      大禹:{index:2,asset:'dayu-v1.png',alt:'大禹持杖立于山峡洪流之间',role:'承担者',poem:['三过家门未入内','凿山导洪身无我','以凡躯担万民之重'],line:'承诺一旦落在你手里，你会希望它有始有终，不在自己这里中断。',basis:'鲧之子。受命治水，改堵为疏，居外十三年，三过家门而不入；划定九州（《史记·夏本纪》《尚书·禹贡》）。',motivation:'交代——对事有个交代，对自己有个交代。',shadow:'把“该不该我做”和“我能不能做”混在一起，什么都接。'},
+      精卫:{index:3,asset:'jingwei-v2.png',alt:'精卫衔石面对辽阔沧海',role:'深耕者',poem:['身化微羽魂不灭','衔木填海志不移','以寸心撼万古沧溟'],line:'一旦确认一件事值得，你愿意把遥远目标拆成许多次具体坚持。',basis:'炎帝之少女女娃，游于东海，溺而不返，化为精卫，常衔西山之木石，以堙于东海（《山海经·北山经》）。',motivation:'认——这件事我认了，就一直做下去。',shadow:'把“坚持”变成“放不下”，明知无益也不肯松手。'},
+      后羿:{index:4,asset:'houyi-v4.png',alt:'后羿挽弓立于山海与星空之间',role:'守护者',poem:['挽弓独对九重天','神箭无言护苍生','以孤胆承天下危难'],line:'当问题真正出现，你更容易锁定关键位置，站出来让事情发生改变。',basis:'尧之时十日并出，焦禾稼、杀草木，民无所食；尧乃使羿上射十日，下杀猰貐、凿齿、九婴、大风、封豨、修蛇，万民皆喜（《淮南子·本经训》）。',motivation:'出手——能解决的事，别让它烂在那儿。',shadow:'把“出手”变成“抢”，用解决代替理解。'},
+      哪吒:{index:5,asset:'nezha-v1.png',alt:'哪吒乘风火轮穿过山海云光',role:'破局者',poem:['闹海抽筋不知惧','剔骨还亲敢担当','以赤子心守人间安'],line:'你对失效的方式很敏感，也更愿意用自己的选择重新打开可能。',basis:'灵珠子转世。闹海杀敖丙、抽筋扒皮；后剔骨还父、削肉还母；太乙真人以莲花荷叶重塑其身（《封神演义》《西游记》）。',motivation:'不被定义——谁规定我该是什么样，我就要把它掀了。',shadow:'为了证明不被控制，把有价值的东西也一起推翻。'}
+    };
+    const imageries={
+      '春·破土':{season:'spring',theme:'theme-spring-output',scene:'春 · 表达与创造',title:'春 · 破土',asset:'spring-season-v2.png',position:'72%'},
+      '夏·穿行':{season:'summer',theme:'theme-summer-output',scene:'夏 · 表达与创造',title:'夏 · 穿行',asset:'summer-passage-v1.png',position:'50%'},
+      '秋·成熟':{season:'autumn',theme:'theme-autumn-result',scene:'秋 · 投入与结果',title:'秋 · 成熟',asset:'autumn-maturity-v1.png',position:'66%'},
+      '冬·燃点':{season:'winter',theme:'theme-winter-output',scene:'冬 · 表达与创造',title:'冬 · 燃点',asset:'winter-spark-v1.png',position:'88%'}
+    };
+    const byId=id=>document.getElementById(id);
+    let currentName='\u4f0f\u7fb2';
+    let currentImagery='\u590f\u00b7\u7a7f\u884c';
+    function render(){
+      const p=profiles[currentName];const imagery=imageries[currentImagery];
+      byId('report-page').className=`report-page ${imagery.theme}`;
+      byId('hero').className=`result-hero result-master-hero archetype-${p.index} season-${imagery.season} ${imagery.theme}`;
+      byId('hero-art').src=`/public/result-heroes/${p.asset}`;byId('hero-art').alt=p.alt;
+      byId('archetype-name').textContent=currentName;byId('archetype-role').textContent=p.role;byId('archetype-line').textContent=p.line;
+      byId('myth-basis').textContent=p.basis;byId('motivation').textContent=p.motivation;byId('shadow').textContent=p.shadow;
+      byId('result-scene').textContent=imagery.scene;byId('imagery-title').textContent=imagery.title;
+      byId('imagery-transition').style.setProperty('--imagery-art',`url('/public/imagery-transitions/${imagery.asset}')`);
+      byId('imagery-transition').style.setProperty('--imagery-position',imagery.position);
+      const poem=byId('poem');poem.replaceChildren(...p.poem.map(line=>{const span=document.createElement('span');span.textContent=line;return span}));poem.setAttribute('aria-label',p.poem.join('，'));
+      document.querySelectorAll('[data-name]').forEach(button=>button.setAttribute('aria-current',String(button.dataset.name===currentName)));
+      document.querySelectorAll('[data-imagery]').forEach(button=>button.setAttribute('aria-current',String(button.dataset.imagery===currentImagery)));
+      history.replaceState(null,'',`#${encodeURIComponent(currentName)}|${encodeURIComponent(currentImagery)}`);
+      window.scrollTo({top:document.querySelector('.preview-switcher').offsetHeight,behavior:'auto'});
+    }
+    document.querySelectorAll('[data-name]').forEach(button=>button.addEventListener('click',()=>{currentName=button.dataset.name;render()}));
+    document.querySelectorAll('[data-imagery]').forEach(button=>button.addEventListener('click',()=>{currentImagery=button.dataset.imagery;render()}));
+    const [initialName,initialImagery]=location.hash.slice(1).split('|').map(value=>decodeURIComponent(value||''));
+    if(profiles[initialName])currentName=initialName;if(imageries[initialImagery])currentImagery=initialImagery;render();
+  </script>
+</body>
+</html>

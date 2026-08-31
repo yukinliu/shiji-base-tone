@@ -7,8 +7,8 @@ const nextConfig: NextConfig = {
   output: 'export',
   trailingSlash: true,
   turbopack: { root: process.cwd() },
-  basePath: usesGitHubProjectPath ? '/shiji-base-tone' : '',
-  assetPrefix: usesGitHubProjectPath ? '/shiji-base-tone/' : undefined,
+  basePath: usesGitHubProjectPath ? '/shiji-myth' : '',
+  assetPrefix: usesGitHubProjectPath ? '/shiji-myth/' : undefined,
   images: { unoptimized: true },
 };
 
