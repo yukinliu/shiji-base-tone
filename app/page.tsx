@@ -63,7 +63,7 @@ async function imgReady(image: HTMLImageElement, timeoutMs = 8000): Promise<void
   try { if (image.decode) await withTimeout(image.decode(), 4000, '图片解码'); } catch { /* 已加载时继续 */ }
 }
 
-const TRANSPARENT_PIXEL = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+const TRANSPARENT_PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 
 type DrawBox = { x: number; y: number; width: number; height: number };
 
@@ -115,6 +115,7 @@ async function renderMobileComposite(
   const styled = [card, heroSection, heroCanvas, imagerySection];
   const originalStyles = styled.map(element => element.style.cssText);
   const rasterImages = [heroImage, imageryImage, productImage, wechatImage];
+  const originalImageStyles = rasterImages.map(image => image.style.cssText);
   const originalSources = rasterImages.map(image => image.src);
 
   let overlayUrl = '';
@@ -123,7 +124,7 @@ async function renderMobileComposite(
     heroSection.style.background = 'transparent';
     heroCanvas.style.background = 'transparent';
     imagerySection.style.background = 'transparent';
-    rasterImages.forEach(image => { image.src = TRANSPARENT_PIXEL; });
+    rasterImages.forEach(image => { image.style.opacity = '0'; image.src = TRANSPARENT_PIXEL; });
     await Promise.all(rasterImages.map(image => imgReady(image, 1500)));
     overlayUrl = await withTimeout(
       toPng(root, { pixelRatio: 1, cacheBust: false, skipFonts: true }),
@@ -132,7 +133,7 @@ async function renderMobileComposite(
     );
   } finally {
     styled.forEach((element, index) => { element.style.cssText = originalStyles[index]; });
-    rasterImages.forEach((image, index) => { image.src = originalSources[index]; });
+    rasterImages.forEach((image, index) => { image.style.cssText = originalImageStyles[index]; image.src = originalSources[index]; });
   }
 
   const [overlay, hero, imagery, product, wechat] = await Promise.all([
@@ -749,6 +750,7 @@ export default function Home() {
 
   return (
     <main className={`app stage-${stage}`}>
+      <p className="persistent-load-note">如遇加载较慢，请耐心等待或重新制作～</p>
       {stage === 'landing' && (
         <section className="landing-screen cosmic-stage">
           <div className="landing-content"><Brand /><div className="landing-message"><p className="landing-product">识己 · 神话原型</p><h1>你的生命故事里，<br />住着哪位神话人物？</h1></div><div className="landing-cta"><button className="primary-button light" onClick={startFresh}>看见我的神话<span>→</span></button>{pendingAvailable && <button className="resume-button" onClick={continuePending}>继续刚才的报告</button>}</div></div>
