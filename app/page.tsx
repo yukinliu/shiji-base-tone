@@ -15,7 +15,11 @@ import {
 function loadImage(absolute: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => resolve(img);
+    img.decoding = 'async';
+    img.onload = async () => {
+      try { if (img.decode) await withTimeout(img.decode(), 4000, '图片解码'); } catch { /* onload 已说明图片可用 */ }
+      resolve(img);
+    };
     img.onerror = () => reject(new Error(`图片加载失败 ${absolute}`));
     img.src = absolute;
   });
@@ -48,15 +52,115 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label = '操作'): Prom
 }
 
 // 等一张 <img> 绘制完成；已完成直接返回，未完成最多等 timeoutMs（超时也继续，绝不卡死）。
-function imgReady(image: HTMLImageElement, timeoutMs = 8000): Promise<void> {
-  if (image.complete && image.naturalWidth > 0) return Promise.resolve();
-  return new Promise<void>(resolve => {
+async function imgReady(image: HTMLImageElement, timeoutMs = 8000): Promise<void> {
+  if (!(image.complete && image.naturalWidth > 0)) await new Promise<void>(resolve => {
     const timer = window.setTimeout(() => resolve(), timeoutMs);
     const done = () => { window.clearTimeout(timer); resolve(); };
     image.addEventListener('load', done, { once: true });
     image.addEventListener('error', done, { once: true });
     if (image.complete && image.naturalWidth === 0) { try { image.src = image.src; } catch { /* 忽略 */ } }
   });
+  try { if (image.decode) await withTimeout(image.decode(), 4000, '图片解码'); } catch { /* 已加载时继续 */ }
+}
+
+const TRANSPARENT_PIXEL = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+
+type DrawBox = { x: number; y: number; width: number; height: number };
+
+function relativeBox(element: Element, root: Element): DrawBox {
+  const box = element.getBoundingClientRect();
+  const origin = root.getBoundingClientRect();
+  return { x: box.left - origin.left, y: box.top - origin.top, width: box.width, height: box.height };
+}
+
+function drawContain(ctx: CanvasRenderingContext2D, image: HTMLImageElement, box: DrawBox) {
+  const scale = Math.min(box.width / image.naturalWidth, box.height / image.naturalHeight);
+  const width = image.naturalWidth * scale;
+  const height = image.naturalHeight * scale;
+  ctx.drawImage(image, box.x + (box.width - width) / 2, box.y + (box.height - height) / 2, width, height);
+}
+
+function drawCover(ctx: CanvasRenderingContext2D, image: HTMLImageElement, box: DrawBox, positionY = .5) {
+  const scale = Math.max(box.width / image.naturalWidth, box.height / image.naturalHeight);
+  const sourceWidth = box.width / scale;
+  const sourceHeight = box.height / scale;
+  const sourceX = Math.max(0, (image.naturalWidth - sourceWidth) / 2);
+  const sourceY = Math.max(0, (image.naturalHeight - sourceHeight) * positionY);
+  ctx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, box.x, box.y, box.width, box.height);
+}
+
+// iOS/微信 WebView 偶发让 html-to-image 同时丢失所有位图。移动端先截取纯 HTML，
+// 再用原生 Canvas 把人物、四季意象和二维码绘回准确位置，避开 foreignObject 的位图限制。
+async function renderMobileComposite(
+  root: HTMLElement,
+  sources: { hero: string; imagery: string; productQr: string; wechatQr: string },
+): Promise<string> {
+  const card = root.querySelector('.export-card') as HTMLElement | null;
+  const heroSection = root.querySelector('.result-master-hero') as HTMLElement | null;
+  const heroCanvas = root.querySelector('.result-master-canvas') as HTMLElement | null;
+  const heroImage = root.querySelector('.result-master-art') as HTMLImageElement | null;
+  const imagerySection = root.querySelector('.imagery-transition') as HTMLElement | null;
+  const imageryImage = root.querySelector('.imagery-transition-art') as HTMLImageElement | null;
+  const productImage = root.querySelector('.qr-item:first-child img') as HTMLImageElement | null;
+  const wechatImage = root.querySelector('.wechat-qr-crop img') as HTMLImageElement | null;
+  if (!card || !heroSection || !heroCanvas || !heroImage || !imagerySection || !imageryImage || !productImage || !wechatImage) {
+    throw new Error('导出图层不完整');
+  }
+
+  const heroBox = relativeBox(heroImage, root);
+  const imageryBox = relativeBox(imageryImage, root);
+  const productBox = relativeBox(productImage, root);
+  const wechatBox = relativeBox(wechatImage, root);
+  const imageryPosition = Number.parseFloat(getComputedStyle(imageryImage).objectPosition.split(' ').at(-1) || '50') / 100;
+  const styled = [card, heroSection, heroCanvas, imagerySection];
+  const originalStyles = styled.map(element => element.style.cssText);
+  const rasterImages = [heroImage, imageryImage, productImage, wechatImage];
+  const originalSources = rasterImages.map(image => image.src);
+
+  let overlayUrl = '';
+  try {
+    card.style.background = 'transparent';
+    heroSection.style.background = 'transparent';
+    heroCanvas.style.background = 'transparent';
+    imagerySection.style.background = 'transparent';
+    rasterImages.forEach(image => { image.src = TRANSPARENT_PIXEL; });
+    await Promise.all(rasterImages.map(image => imgReady(image, 1500)));
+    overlayUrl = await withTimeout(
+      toPng(root, { pixelRatio: 1, cacheBust: false, skipFonts: true }),
+      30000,
+      '生成文字图层',
+    );
+  } finally {
+    styled.forEach((element, index) => { element.style.cssText = originalStyles[index]; });
+    rasterImages.forEach((image, index) => { image.src = originalSources[index]; });
+  }
+
+  const [overlay, hero, imagery, product, wechat] = await Promise.all([
+    loadImage(overlayUrl), loadImage(sources.hero), loadImage(sources.imagery),
+    loadImage(sources.productQr), loadImage(sources.wechatQr),
+  ]);
+  const canvas = document.createElement('canvas');
+  canvas.width = overlay.naturalWidth;
+  canvas.height = overlay.naturalHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('无法创建最终画布');
+  ctx.fillStyle = '#f5eee1';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(hero, heroBox.x, heroBox.y, heroBox.width, heroBox.height);
+  drawCover(ctx, imagery, imageryBox, Number.isFinite(imageryPosition) ? imageryPosition : .5);
+  ctx.drawImage(overlay, 0, 0);
+
+  const insetBox = (image: HTMLImageElement, box: DrawBox) => {
+    const style = getComputedStyle(image);
+    const left = Number.parseFloat(style.paddingLeft) || 0;
+    const right = Number.parseFloat(style.paddingRight) || 0;
+    const top = Number.parseFloat(style.paddingTop) || 0;
+    const bottom = Number.parseFloat(style.paddingBottom) || 0;
+    return { x: box.x + left, y: box.y + top, width: box.width - left - right, height: box.height - top - bottom };
+  };
+  drawContain(ctx, product, insetBox(productImage, productBox));
+  drawContain(ctx, wechat, insetBox(wechatImage, wechatBox));
+  return canvas.toDataURL('image/png');
 }
 
 // 跨端复制文本：execCommand 在微信/webview 中最可靠；安全上下文下再尝试异步剪贴板。
@@ -258,9 +362,10 @@ function ImageryTransition({ report, exportMode = false, imageryDataUrl = '' }: 
     winter: { src: '/imagery-transitions/winter-spark-v1.png', position: '88%' },
   };
   const art = artBySeason[report.season];
-  const style = ({ '--imagery-art': `url(${imageryDataUrl || art.src})`, '--imagery-position': art.position } as React.CSSProperties);
+  const style = ({ '--imagery-position': art.position } as React.CSSProperties);
   return (
     <section className={`imagery-transition${exportMode ? ' is-export' : ''}`} style={style}>
+      <img className="imagery-transition-art" src={imageryDataUrl || art.src} alt="" draggable={false} />
       <svg className="imagery-transition-curve" viewBox="0 0 1000 120" preserveAspectRatio="none" aria-hidden="true">
         <path d="M0 0H1000V0C805 112 195 112 0 0Z" />
       </svg>
@@ -367,6 +472,7 @@ export default function Home() {
   const surveyLeft = useRef(false);
   const surveyOpenedAt = useRef(0);
   const popupTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const answerTransitioning = useRef(false);
 
   const years = useMemo(() => Array.from({ length: currentYear - 1899 }, (_, index) => currentYear - index), [currentYear]);
   const days = useMemo(() => Array.from({ length: daysInMonth(Number(birth.year), Number(birth.month)) }, (_, index) => index + 1), [birth.year, birth.month]);
@@ -420,13 +526,15 @@ export default function Home() {
 
   useEffect(() => {
     if (!report) return;
+    setResultHeroDataUrl('');
+    setImageryDataUrl('');
     const hero = RESULT_HERO_ASSETS[report.archetype as keyof typeof RESULT_HERO_ASSETS];
     const imageryPath: Record<MythReport['season'], string> = {
       spring: '/imagery-transitions/spring-season-v2.png', summer: '/imagery-transitions/summer-passage-v1.png',
       autumn: '/imagery-transitions/autumn-maturity-v1.png', winter: '/imagery-transitions/winter-spark-v1.png',
     };
-    assetToDataUrl(hero.src, 1100, 'image/jpeg', .9).then(setResultHeroDataUrl).catch(() => {});
-    assetToDataUrl(imageryPath[report.season], 1100, 'image/jpeg', .9).then(setImageryDataUrl).catch(() => {});
+    assetToDataUrl(hero.src, 900, 'image/jpeg', .84).then(setResultHeroDataUrl).catch(() => {});
+    assetToDataUrl(imageryPath[report.season], 900, 'image/jpeg', .84).then(setImageryDataUrl).catch(() => {});
   }, [report?.archetype, report?.season]);
 
   useEffect(() => {
@@ -465,9 +573,11 @@ export default function Home() {
   }
 
   function chooseAnswer(answer: AnswerKey) {
+    if (answerTransitioning.current) return;
+    answerTransitioning.current = true;
     const next = [...answers]; next[questionIndex] = answer; setAnswers(next);
-    if (questionIndex < 17) setTimeout(() => setQuestionIndex(index => index + 1), 220);
-    else setTimeout(() => setStage('birth'), 220);
+    if (questionIndex < 17) setTimeout(() => { setQuestionIndex(questionIndex + 1); answerTransitioning.current = false; }, 220);
+    else setTimeout(() => { setStage('birth'); answerTransitioning.current = false; }, 220);
   }
 
   function validateBirth() {
@@ -483,11 +593,21 @@ export default function Home() {
 
   function makeReport() {
     if (!focus) { setError('请选择一个此刻最关心的方向。'); return; }
+    const firstMissing = QUESTIONS.findIndex((_, index) => !ANSWER_KEYS.includes(answers[index]));
+    if (firstMissing >= 0) {
+      setQuestionIndex(firstMissing); setStage('questions');
+      setError('有一道题还没有记录，请补充后再继续。');
+      return;
+    }
     try {
-      const next = generateMythReport(answers, birth, focus); setReport(next); setStage('making'); setMakingStep(0);
+      const normalizedBirth: BirthData = { ...birth, hour: birth.hour || 'unknown' };
+      const next = generateMythReport([...answers], normalizedBirth, focus); setReport(next); setStage('making'); setMakingStep(0);
       [650, 1350, 2100].forEach((delay, index) => window.setTimeout(() => setMakingStep(index + 1), delay));
       window.setTimeout(() => setStage('reveal'), 2850);
-    } catch { setError('这次没有顺利制作，请检查信息后再试一次。'); }
+    } catch (reportError) {
+      console.error('Unable to create report:', reportError);
+      setError('这次没有顺利制作，请稍后再试一次；你刚才的答案仍然保留。');
+    }
   }
 
   function continuePending() {
@@ -522,7 +642,7 @@ export default function Home() {
     setSaving(true); setMessage('');
     try {
       // 字体就绪（最多等 5s，避免个别 webview 里 document.fonts.ready 不触发导致永久挂起）。
-      await withTimeout(document.fonts.ready, 5000, '字体就绪');
+      try { if (document.fonts?.ready) await withTimeout(document.fonts.ready, 5000, '字体就绪'); } catch { /* 字体超时不阻断导出 */ }
       // 导出使用与网页相同的主视觉与四季弧形图，并将图片内联，避免移动端截图丢图。
       let heroUrl = resultHeroDataUrl;
       let seasonUrl = imageryDataUrl;
@@ -533,8 +653,8 @@ export default function Home() {
         spring: '/imagery-transitions/spring-season-v2.png', summer: '/imagery-transitions/summer-passage-v1.png',
         autumn: '/imagery-transitions/autumn-maturity-v1.png', winter: '/imagery-transitions/winter-spark-v1.png',
       };
-      if (!heroUrl) try { heroUrl = await withTimeout(assetToDataUrl(hero.src, 1100, 'image/jpeg', .9), 8000, '准备人物主视觉'); } catch { /* 使用页面资源兜底 */ }
-      if (!seasonUrl) try { seasonUrl = await withTimeout(assetToDataUrl(seasonPath[report.season], 1100, 'image/jpeg', .9), 8000, '准备生命意象'); } catch { /* 使用页面资源兜底 */ }
+      if (!heroUrl) try { heroUrl = await withTimeout(assetToDataUrl(hero.src, 900, 'image/jpeg', .84), 12000, '准备人物主视觉'); } catch { /* 使用页面资源兜底 */ }
+      if (!seasonUrl) try { seasonUrl = await withTimeout(assetToDataUrl(seasonPath[report.season], 900, 'image/jpeg', .84), 12000, '准备生命意象'); } catch { /* 使用页面资源兜底 */ }
       if (!wechatUrl) {
         try { wechatUrl = await withTimeout(assetToDataUrl('/wechat-qr-400.png', 400), 6000, '准备个人二维码'); } catch { /* 用已有值兜底 */ }
       }
@@ -542,38 +662,35 @@ export default function Home() {
         const siteUrl = `${window.location.origin}${window.location.pathname}`;
         try { productUrl = await QRCode.toDataURL(siteUrl, { width: 260, margin: 2, color: { dark: '#17323c', light: '#eef3f2' } }); } catch { /* 保留空码兜底 */ }
       }
+      const heroSource = heroUrl || new URL(hero.src, window.location.href).href;
+      const imagerySource = seasonUrl || new URL(seasonPath[report.season], window.location.href).href;
+      const wechatSource = wechatUrl || new URL('/wechat-qr-400.png', window.location.href).href;
+      if (!productUrl) throw new Error('产品二维码尚未准备好');
       const exportHero = exportRef.current.querySelector('.result-master-art') as HTMLImageElement | null;
-      if (exportHero && heroUrl) exportHero.src = heroUrl;
-      const exportImagery = exportRef.current.querySelector('.imagery-transition') as HTMLElement | null;
-      if (exportImagery && seasonUrl) exportImagery.style.setProperty('--imagery-art', `url(${seasonUrl})`);
+      if (exportHero) exportHero.src = heroSource;
+      const exportImagery = exportRef.current.querySelector('.imagery-transition-art') as HTMLImageElement | null;
+      if (exportImagery) exportImagery.src = imagerySource;
       const wechatImg = exportRef.current.querySelector('.wechat-qr-crop img') as HTMLImageElement | null;
-      if (wechatImg && wechatUrl) wechatImg.src = wechatUrl;
+      if (wechatImg) wechatImg.src = wechatSource;
       const productImg = exportRef.current.querySelector('.qr-item:first-child img') as HTMLImageElement | null;
       if (productImg && productUrl) productImg.src = productUrl;
       // 等所有内联图绘制完成（最长 8s/张，超时也继续，不卡死）。
       const embeddedImages = Array.from(exportRef.current.querySelectorAll('img'));
       await Promise.all(embeddedImages.map(image => imgReady(image, 8000)));
-      // 额外等弧形意象背景完成解码。
-      if (exportImagery && seasonUrl) {
-        await Promise.race([
-          new Promise<void>(resolve => {
-            const tmp = new Image();
-            tmp.onload = () => resolve();
-            tmp.onerror = () => resolve();
-            tmp.src = seasonUrl;
-          }),
-          new Promise<void>(resolve => setTimeout(resolve, 3000)),
-        ]);
-      }
       // 给 WebKit 额外留出解码/绘制时间。实测 500ms 可稳定渲染 background-image，800ms 更稳。
       await new Promise<void>(resolve => setTimeout(resolve, 800));
       // skipFonts:true 跳过 web 字体抓取（避免字体文件在微信/webview 加载慢导致 toPng 永久挂起）；
       // 外层 withTimeout 作最后兜底：toPng 超时即报错提示，而非「正在制作图片」一直灰着没下文。
-      const dataUrl = await withTimeout(
-        toPng(exportRef.current, { pixelRatio: 1, cacheBust: false, backgroundColor: '#f5eee1', skipFonts: true }),
-        20000, '生成图片'
-      );
-      if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) setSavedImage(dataUrl);
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      const dataUrl = isMobile
+        ? await renderMobileComposite(exportRef.current, {
+            hero: heroSource, imagery: imagerySource, productQr: productUrl, wechatQr: wechatSource,
+          })
+        : await withTimeout(
+            toPng(exportRef.current, { pixelRatio: 1, cacheBust: false, backgroundColor: '#f5eee1', skipFonts: true }),
+            30000, '生成图片'
+          );
+      if (isMobile) setSavedImage(dataUrl);
       else { const link = document.createElement('a'); link.download = `识己·神话原型-${report.archetype}.png`; link.href = dataUrl; link.click(); }
       setHasSaved(true); setMessage('图片已经准备好。你可以把它留给自己，也可以邀请朋友一起来看看。');
     } catch (saveError) {
@@ -599,7 +716,11 @@ export default function Home() {
     try {
       if (isMobile && navigator.share) {
         try {
-          await navigator.share({ title: '识己 · 神话原型', text, url: pageUrl });
+          await navigator.share({
+            title: '你的生命故事里，住着哪位神话人物？',
+            text: `我是「${report.archetype}」${report.archetypeTitle}。约 3 分钟，看看与你最接近的神话原型。`,
+            url: pageUrl,
+          });
           return;
         } catch (shareError) {
           if ((shareError as DOMException)?.name === 'AbortError') return;
@@ -638,7 +759,7 @@ export default function Home() {
       )}
 
       {stage === 'questions' && currentQuestion && (
-        <section className="flow-screen question-screen"><Brand /><div className="question-progress"><div className="progress-track"><i style={{ width: `${((questionIndex + 1) / 18) * 100}%` }} /></div><span>{String(questionIndex + 1).padStart(2, '0')} / 18</span></div><div className="question-card"><h1>{currentQuestion.text}</h1><div className="answer-list">{ANSWER_KEYS.map(key => <button className={answers[questionIndex] === key ? 'is-selected' : ''} key={key} onClick={() => chooseAnswer(key)}><span>{currentQuestion.options[key]}</span><i /></button>)}</div><button className="back-link" disabled={questionIndex === 0} onClick={() => setQuestionIndex(index => Math.max(0, index - 1))}>← 上一题</button></div></section>
+        <section className="flow-screen question-screen"><Brand /><div className="question-progress"><div className="progress-track"><i style={{ width: `${((questionIndex + 1) / 18) * 100}%` }} /></div><span>{String(questionIndex + 1).padStart(2, '0')} / 18</span></div><div className="question-card"><h1>{currentQuestion.text}</h1><div className="answer-list">{ANSWER_KEYS.map(key => <button className={answers[questionIndex] === key ? 'is-selected' : ''} key={`${questionIndex}-${key}`} onClick={() => chooseAnswer(key)}><span>{currentQuestion.options[key]}</span><i /></button>)}</div>{error && <p className="error" role="alert">{error}</p>}<button className="back-link" disabled={questionIndex === 0} onClick={() => { answerTransitioning.current = false; setError(''); setQuestionIndex(index => Math.max(0, index - 1)); }}>← 上一题</button></div></section>
       )}
 
       {stage === 'birth' && (
