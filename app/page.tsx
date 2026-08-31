@@ -703,6 +703,7 @@ export default function Home() {
   async function shareProduct() {
     if (!report) return;
     const pageUrl = `${window.location.origin}${window.location.pathname}`;
+    const shareCardUrl = `${pageUrl}?share=v2`;
     const text = `快来看看你最像的神话人物是谁～我是「${report.archetype}」${report.archetypeTitle}\n\n${pageUrl}`;
     const isWeChat = /micromessenger/i.test(navigator.userAgent);
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -719,7 +720,7 @@ export default function Home() {
           await navigator.share({
             title: '你的生命故事里，住着哪位神话人物？',
             text: `我是「${report.archetype}」${report.archetypeTitle}。约 3 分钟，看看与你最接近的神话原型。`,
-            url: pageUrl,
+            url: shareCardUrl,
           });
           return;
         } catch (shareError) {
